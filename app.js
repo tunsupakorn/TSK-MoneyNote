@@ -294,7 +294,7 @@ function viewSettings() {
         ${ui.authError ? `<p class="err">${esc(ui.authError)}</p>` : ''}
         <button class="btn primary" ${ui.authBusy ? 'disabled' : ''}>${ui.authBusy ? 'กำลังดำเนินการ…' : up ? 'สมัครบัญชีใหม่' : 'เข้าสู่ระบบ'}</button>
         <button type="button" class="btn ghost" data-action="google">เข้าสู่ระบบด้วย Google</button>
-        <div class="row between small"><button type="button" class="link" data-action="auth-mode">${up ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครใหม่'}</button>
+        <div class="row between small">${S.privateApp ? '<span></span>' : `<button type="button" class="link" data-action="auth-mode">${up ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครใหม่'}</button>`}
         <button type="button" class="link" data-action="reset-pw">ลืมรหัสผ่าน</button></div>
       </form>
       ${state.syncStatus === 'error' ? `<p class="err">${esc(state.syncError)}</p>` : ''}`;
@@ -351,6 +351,31 @@ function viewSettings() {
 // ---------- access gate (email not verified / not on the allow list) ----------
 function viewGate() {
   const email = esc(state.user?.email || '');
+  if (S.privateApp && state.access === 'private') {
+    return `<section class="onboard gate">
+      <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔒</span></div>
+      <h2>แอปส่วนตัว</h2>
+      <p>จุกจิกนี้ใช้ได้เฉพาะบัญชีของเจ้าของเท่านั้น<br>ตอนนี้ล็อกอินอยู่ด้วย <b>${email}</b></p>
+      <button class="btn primary big" data-action="signout-now">ออกจากระบบ แล้วล็อกอินบัญชีเจ้าของ</button>
+    </section>`;
+  }
+  if (S.privateApp && state.mode !== 'cloud') {
+    return `<section class="onboard gate">
+      <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
+      <h2>เข้าสู่ระบบจุกจิก</h2>
+      <p>แอปส่วนตัว · ล็อกอินด้วยบัญชีเดียวกันทุกเครื่อง ข้อมูลซิงก์ถึงกันหมด</p>
+      <button class="btn primary big" data-action="google">เข้าสู่ระบบด้วย Google</button>
+      <details class="more"><summary>เข้าสู่ระบบด้วยอีเมล</summary>
+        <form class="auth" data-form="auth">
+          <input type="email" name="email" placeholder="อีเมล" autocomplete="email" required>
+          <input type="password" name="pw" placeholder="รหัสผ่าน" autocomplete="current-password" required>
+          <button class="btn ghost" ${ui.authBusy ? 'disabled' : ''}>${ui.authBusy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button>
+        </form>
+      </details>
+      ${ui.authError ? `<p class="err">${esc(ui.authError)}</p>` : ''}
+      ${state.syncStatus === 'error' ? `<p class="err">${esc(state.syncError)}</p>` : ''}
+    </section>`;
+  }
   const verify = state.access === 'verify';
   return `<section class="onboard gate">
     <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">${verify ? '📧' : '🔒'}</span></div>
@@ -763,7 +788,9 @@ function download(name, text, type) {
 function render() {
   const app = $('#app');
   const onboarding = !prefs.onboarded;
-  const gated = state.mode === 'cloud' && state.access !== 'ok';
+  // private app: nothing is shown until the owner's account is signed in (wait quietly while Firebase starts)
+  const privateGate = S.privateApp && state.cloudConfigured && state.syncStatus !== 'local' && (state.mode !== 'cloud' || state.access !== 'ok');
+  const gated = privateGate || (state.mode === 'cloud' && state.access !== 'ok');
   document.body.classList.toggle('no-nav', onboarding || gated);
   if (gated && !onboarding) { $('#app').innerHTML = viewGate(); return; }
   const keepScroll = window.scrollY;
@@ -839,6 +866,7 @@ document.addEventListener('click', async e => {
       return;
     }
     case 'signout': if (confirm('ออกจากระบบในเครื่องนี้?')) await S.signOut(); return;
+    case 'signout-now': await S.signOut(); return;
     case 'gate-recheck':
       ui.gateMsg = 'กำลังตรวจสอบ…'; render();
       try { await S.recheckAccess(); ui.gateMsg = state.access === 'ok' ? '' : (state.access === 'verify' ? 'ยังไม่ได้ยืนยันอีเมล ลองกดลิงก์ในอีเมลก่อน' : 'ยังไม่ได้รับอนุญาต'); }

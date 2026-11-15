@@ -1,6 +1,7 @@
 // Data layer: works locally (localStorage) and switches to Firebase Firestore for multi-device sync.
-import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID, inviteOnly as INVITE_ONLY } from './firebase-config.js';
-export const inviteOnly = !!INVITE_ONLY;
+import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID, inviteOnly as INVITE_ONLY, privateApp as PRIVATE_APP } from './firebase-config.js';
+export const inviteOnly = !!INVITE_ONLY && !PRIVATE_APP;
+export const privateApp = !!PRIVATE_APP;
 
 const FB_VERSION = '11.0.2';
 
@@ -145,6 +146,14 @@ function attachUser(user) {
     provider: user.providerData?.[0]?.providerId || 'password' };
   state.access = 'ok';
   state.localPendingCount = LS.get('jj_tx', []).length;
+  // private app: only the owner's account may use it
+  if (PRIVATE_APP && !state.isOwner) {
+    state.access = 'private';
+    state.syncStatus = 'signed-out';
+    state.tx = [];
+    emit();
+    return;
+  }
   // accounts made with email + password must confirm the address first (Google accounts are already verified)
   if (INVITE_ONLY && !state.isOwner && !user.emailVerified) {
     state.access = 'verify';

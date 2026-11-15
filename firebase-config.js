@@ -9,7 +9,9 @@ export const firebaseConfig = {
   appId: "1:114129745621:web:f7f0c1c59c71aa13da945c"
 };
 
-// เจ้าของแอป (ใช้เมื่อเปิดโหมดเฉพาะอีเมลที่อนุญาต)
+// เจ้าของแอป: tun.supakorn1993@gmail.com
 export const ownerUid = "bccZ2Cvc0sYEY9VPt6BCyqIiU9R2";
-// false = ใครมีลิงก์ก็ใช้ได้ (ข้อมูลแยกกัน) · true = เฉพาะอีเมลที่อนุญาต (ต้องใช้ firestore.rules แบบ invite-only ด้วย)
+// true = แอปส่วนตัว ใช้ได้เฉพาะเจ้าของ (ต้องตรงกับ firestore.rules)
+export const privateApp = true;
+// true = เฉพาะอีเมลที่อนุญาต (ไม่ใช้เมื่อเป็นแอปส่วนตัว)
 export const inviteOnly = false;
