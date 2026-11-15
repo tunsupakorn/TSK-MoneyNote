@@ -8,3 +8,6 @@ export const firebaseConfig = {
   messagingSenderId: "114129745621",
   appId: "1:114129745621:web:f7f0c1c59c71aa13da945c"
 };
+
+// เจ้าของแอป: เห็นการ์ด "ผู้ใช้ที่อนุญาต" ในตั้งค่า (ต้องตรงกับ isOwner() ใน firestore.rules)
+export const ownerUid = "bccZ2Cvc0sYEY9VPt6BCyqIiU9R2";

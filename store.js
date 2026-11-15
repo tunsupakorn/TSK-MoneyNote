@@ -1,5 +1,5 @@
 // Data layer: works locally (localStorage) and switches to Firebase Firestore for multi-device sync.
-import { firebaseConfig as FILE_CONFIG } from './firebase-config.js';
+import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID } from './firebase-config.js';
 
 const FB_VERSION = '11.0.2';
 
@@ -62,6 +62,10 @@ export const state = {
   tx: [],
   settings: defaultSettings(),
   localPendingCount: 0,     // local items that can be uploaded after sign-in
+  access: 'ok',             // ok | verify (email not verified yet) | denied (email not on the allow list)
+  isOwner: false,
+  allowList: [],            // owner only: [{ email, name, addedAt }]
+  openSignup: false,        // owner only: anyone may use the app
 };
 
 import { DEFAULT_MODEL } from './gemini.js';
@@ -120,32 +124,67 @@ async function initFirebase(cfg) {
   A.onAuthStateChanged(auth, user => user ? attachUser(user) : detachUser());
 }
 
+function denied(err) {
+  if (err?.code !== 'permission-denied') return false;
+  unsubs.forEach(u => u()); unsubs = [];
+  state.access = 'denied';
+  state.tx = [];
+  state.syncStatus = 'error';
+  state.syncError = 'บัญชีนี้ยังไม่ได้รับอนุญาตให้ใช้แอป';
+  emit();
+  return true;
+}
+
 function attachUser(user) {
   const { db, F } = fb;
   unsubs.forEach(u => u()); unsubs = [];
   state.mode = 'cloud';
-  state.user = { uid: user.uid, email: user.email, name: user.displayName };
-  state.syncStatus = 'pending';
+  state.isOwner = !!OWNER_UID && user.uid === OWNER_UID;
+  state.user = { uid: user.uid, email: user.email, name: user.displayName, verified: user.emailVerified,
+    provider: user.providerData?.[0]?.providerId || 'password' };
+  state.access = 'ok';
   state.localPendingCount = LS.get('jj_tx', []).length;
+  // accounts made with email + password must confirm the address first (Google accounts are already verified)
+  if (!state.isOwner && !user.emailVerified) {
+    state.access = 'verify';
+    state.syncStatus = 'signed-out';
+    state.tx = [];
+    emit();
+    return;
+  }
+  state.syncStatus = 'pending';
   emit();
   unsubs.push(F.onSnapshot(F.collection(db, 'users', user.uid, 'tx'), { includeMetadataChanges: true }, snap => {
     state.tx = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.syncStatus = snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'pending' : 'synced';
     emit();
-  }, err => { state.syncStatus = 'error'; state.syncError = err.message; emit(); }));
+  }, err => { if (!denied(err)) { state.syncStatus = 'error'; state.syncError = err.message; emit(); } }));
+  if (state.isOwner) {
+    unsubs.push(F.onSnapshot(F.collection(db, 'allow'), snap => {
+      state.allowList = snap.docs.map(d => ({ email: d.id, ...d.data() })).sort((a, b) => a.email.localeCompare(b.email));
+      emit();
+    }, err => console.warn('allow list', err)));
+    unsubs.push(F.onSnapshot(F.doc(db, 'config', 'access'), snap => {
+      state.openSignup = snap.exists() && snap.data().open === true;
+      emit();
+    }, err => console.warn('access', err)));
+  }
   unsubs.push(F.onSnapshot(F.doc(db, 'users', user.uid), snap => {
     const s = snap.exists() ? snap.data().settings : null;
     state.settings = { ...defaultSettings(), catVersion: s?.categories ? 1 : CAT_VERSION, ...(s || {}) };
     if (s && migrateSettings(state.settings) && !snap.metadata.fromCache)
       F.setDoc(F.doc(db, 'users', user.uid), { settings: clean(state.settings) }, { merge: true }).catch(syncFail);
     emit();
-  }, err => console.warn(err)));
+  }, err => { if (!denied(err)) console.warn(err); }));
 }
 
 function detachUser() {
   unsubs.forEach(u => u()); unsubs = [];
   state.mode = 'local';
   state.user = null;
+  state.access = 'ok';
+  state.isOwner = false;
+  state.allowList = [];
   state.syncStatus = state.cloudConfigured ? 'signed-out' : 'local';
   loadLocal();
   emit();
@@ -225,11 +264,42 @@ const authMsg = e => ({
   'auth/unauthorized-domain': 'โดเมนนี้ยังไม่ได้เพิ่มใน Firebase > Authentication > Settings > Authorized domains',
   'auth/operation-not-allowed': 'ยังไม่ได้เปิดวิธีล็อกอินนี้ใน Firebase Console',
   'auth/network-request-failed': 'เชื่อมต่ออินเทอร์เน็ตไม่ได้',
+  'auth/too-many-requests': 'ส่งคำขอบ่อยเกินไป รอสักครู่แล้วลองใหม่',
 }[e.code] || e.message);
 
 function needFb() { if (!fb) throw new Error('ยังไม่ได้ตั้งค่า Firebase'); }
 export async function signIn(email, pw) { needFb(); try { await fb.A.signInWithEmailAndPassword(fb.auth, email, pw); } catch (e) { throw new Error(authMsg(e)); } }
-export async function signUp(email, pw) { needFb(); try { await fb.A.createUserWithEmailAndPassword(fb.auth, email, pw); } catch (e) { throw new Error(authMsg(e)); } }
+export async function signUp(email, pw) {
+  needFb();
+  try {
+    const cred = await fb.A.createUserWithEmailAndPassword(fb.auth, email, pw);
+    await fb.A.sendEmailVerification(cred.user).catch(() => {});
+  } catch (e) { throw new Error(authMsg(e)); }
+}
+export async function resendVerification() {
+  needFb();
+  if (!fb.auth.currentUser) return;
+  try { await fb.A.sendEmailVerification(fb.auth.currentUser); } catch (e) { throw new Error(authMsg(e)); }
+}
+// after clicking the link in the email: refresh the account and try again
+export async function recheckAccess() {
+  needFb();
+  const u = fb.auth.currentUser;
+  if (!u) return;
+  await u.reload();
+  await u.getIdToken(true);
+  attachUser(fb.auth.currentUser);
+}
+
+// ---- owner: who may use the app ----
+const emailKey = e => String(e || '').trim().toLowerCase();
+export async function allowEmail(email, name = '') {
+  const key = emailKey(email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) throw new Error('อีเมลไม่ถูกต้อง');
+  await fb.F.setDoc(fb.F.doc(fb.db, 'allow', key), { name: String(name || '').trim(), addedAt: Date.now() });
+}
+export async function removeEmail(email) { await fb.F.deleteDoc(fb.F.doc(fb.db, 'allow', emailKey(email))); }
+export async function setOpenSignup(open) { await fb.F.setDoc(fb.F.doc(fb.db, 'config', 'access'), { open: !!open }, { merge: true }); }
 export async function signInGoogle() { needFb(); try { await fb.A.signInWithPopup(fb.auth, new fb.A.GoogleAuthProvider()); } catch (e) { throw new Error(authMsg(e)); } }
 export async function resetPassword(email) { needFb(); try { await fb.A.sendPasswordResetEmail(fb.auth, email); } catch (e) { throw new Error(authMsg(e)); } }
 export async function signOut() { if (fb) await fb.A.signOut(fb.auth); }

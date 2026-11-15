@@ -27,6 +27,55 @@ function setup() {
   Logger.log('พร้อมแล้ว: ' + ss.getUrl());
 }
 
+// ---- เมนู 🐣 จุกจิก ในชีต: พาเชื่อมกับแอปทีละขั้น ----
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('🐣 จุกจิก')
+    .addItem('เชื่อมกับแอปจุกจิก (เริ่มที่นี่)', 'showConnect')
+    .addSeparator()
+    .addItem('ยกเลิกการจับคู่กับแอป', 'resetPairingMenu')
+    .addToUi();
+}
+
+function webAppUrl() {
+  try { const u = ScriptApp.getService().getUrl(); return u && /\/exec$/.test(u) ? u : ''; } catch (e) { return ''; }
+}
+
+function showConnect() {
+  setup();
+  const url = webAppUrl();
+  const paired = !!PropertiesService.getScriptProperties().getProperty('TOKEN');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const css = '<style>body{font-family:Sarabun,Tahoma,sans-serif;font-size:14px;line-height:1.6;color:#2B2118}' +
+    'ol{padding-left:20px}li{margin-bottom:6px}b{color:#000}.box{background:#FFF1D2;border-radius:10px;padding:10px;margin:10px 0}' +
+    'input{width:100%;padding:8px;font-size:13px;border:1px solid #F1E3C6;border-radius:8px}' +
+    'button{background:#FFC83D;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer;margin-top:8px}</style>';
+  let html;
+  if (url) {
+    html = css + '<p>✅ ชีตนี้พร้อมแล้ว' + (paired ? ' และ<b>จับคู่กับแอปแล้ว</b>' : '') + '</p>' +
+      '<div class="box"><b>ลิงก์ web app ของคุณ</b><input id="u" value="' + esc(url) + '" readonly onclick="this.select()">' +
+      '<button onclick="var i=document.getElementById(\'u\');i.select();document.execCommand(\'copy\');this.textContent=\'คัดลอกแล้ว ✓\'">📋 คัดลอกลิงก์</button></div>' +
+      '<ol><li>เปิดแอปจุกจิก › <b>⚙️ ตั้งค่า</b> › การ์ด <b>📗 Google Sheet</b></li>' +
+      '<li>วางลิงก์นี้ แล้วกด <b>เชื่อมต่อ</b> — เสร็จแล้ว! รายการจะถูกส่งมาที่ชีตนี้ และสลิปเก็บใน Google Drive ของคุณ</li></ol>' +
+      '<p style="color:#8C7C66">อย่าส่งลิงก์นี้ให้คนอื่น เครื่องแรกที่กดเชื่อมต่อจะเป็นเจ้าของ</p>';
+  } else {
+    html = css + '<p>เหลืออีกขั้นเดียว: เปิดชีตนี้เป็น <b>web app</b> (ทำครั้งเดียว ~1 นาที)</p><ol>' +
+      '<li>เมนู <b>ส่วนขยาย › Apps Script</b></li>' +
+      '<li>มุมขวาบน กด <b>การทำให้ใช้งานได้ › การทำให้ใช้งานได้รายการใหม่</b> (Deploy › New deployment)</li>' +
+      '<li>ตรงไอคอนฟันเฟือง เลือก <b>เว็บแอป</b> (Web app)</li>' +
+      '<li>ตั้งค่า: เรียกใช้ในฐานะ <b>ฉัน</b> · ผู้มีสิทธิ์เข้าถึง <b>ทุกคน</b> (Execute as: Me · Who has access: Anyone)</li>' +
+      '<li>กด <b>ทำให้ใช้งานได้</b> แล้วกด <b>ให้สิทธิ์</b> › เลือกบัญชี › Advanced › Go to … › <b>Allow</b></li>' +
+      '<li>กลับมาที่ชีตนี้ เปิดเมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> อีกครั้ง จะได้ลิงก์ไปวางในแอป</li></ol>';
+  }
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(460).setHeight(url ? 360 : 420), '🐣 เชื่อมกับแอปจุกจิก');
+}
+
+function resetPairingMenu() {
+  const ui = SpreadsheetApp.getUi();
+  if (ui.alert('ยกเลิกการจับคู่กับแอป?', 'ใช้เมื่อต้องการเชื่อมกับบัญชีจุกจิกใหม่ ข้อมูลในชีตยังอยู่', ui.ButtonSet.OK_CANCEL) !== ui.Button.OK) return;
+  resetPairing();
+  ui.alert('ยกเลิกแล้ว เปิดแอปแล้วกดเชื่อมต่อใหม่ได้เลย');
+}
+
 /** ยกเลิกการจับคู่กับแอป (ให้แอปเชื่อมต่อใหม่ได้) */
 function resetPairing() {
   PropertiesService.getScriptProperties().deleteProperty('TOKEN');

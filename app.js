@@ -306,6 +306,7 @@ function viewSettings() {
     ${geminiCard()}
 
     ${sheetCard()}
+    ${state.isOwner ? ownerCard() : ''}
 
     <section class="card"><h3>🎯 งบประมาณรายเดือน</h3>
       <div class="row gap"><input type="number" inputmode="decimal" placeholder="เช่น 15000" value="${state.settings.budget || ''}" data-input="budget">
@@ -345,6 +346,53 @@ function viewSettings() {
       <button class="link" data-action="show-ob">ดูหน้าแนะนำแอปอีกครั้ง</button>
     </section>
     <p class="center muted small pad">จุกจิก JukJik v1.0</p>`;
+}
+
+// ---------- access gate (email not verified / not on the allow list) ----------
+function viewGate() {
+  const email = esc(state.user?.email || '');
+  const verify = state.access === 'verify';
+  return `<section class="onboard gate">
+    <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">${verify ? '📧' : '🔒'}</span></div>
+    <h2>${verify ? 'ยืนยันอีเมลก่อนใช้งาน' : 'บัญชีนี้ยังไม่ได้รับอนุญาต'}</h2>
+    ${verify
+      ? `<p>จุกจิกส่งลิงก์ยืนยันไปที่ <b>${email}</b> แล้ว เปิดอีเมล (ดูในโฟลเดอร์สแปมด้วย) กดลิงก์ แล้วกลับมากดปุ่มด้านล่าง</p>
+         <button class="btn primary big" data-action="gate-recheck">ยืนยันแล้ว เข้าใช้งาน</button>
+         <button class="btn ghost" data-action="gate-resend">ส่งอีเมลยืนยันอีกครั้ง</button>`
+      : `<p>แอปนี้เปิดให้เฉพาะคนที่เจ้าของแอปอนุญาต ส่งอีเมลนี้ให้เจ้าของแอปเพิ่มให้:</p>
+         <p class="gate-email">${email}</p>
+         <button class="btn primary big" data-action="gate-recheck">ได้รับอนุญาตแล้ว ลองอีกครั้ง</button>
+         <button class="btn ghost" data-action="gate-copy">📋 คัดลอกอีเมล</button>`}
+    <button class="link" data-action="signout">ออกจากระบบ / ใช้บัญชีอื่น</button>
+    ${ui.gateMsg ? `<p class="small muted">${esc(ui.gateMsg)}</p>` : ''}
+  </section>`;
+}
+
+// ---------- owner: who may use the app ----------
+const APP_URL = 'https://tunsupakorn.github.io/jukjik/';
+const TEMPLATE_URL = 'https://docs.google.com/spreadsheets/d/1IT8M4VotXmahde_1bo0Shdfwyem8lhZWQuTZL5uCnH8/copy';
+function inviteText(name) {
+  return `${name ? `สวัสดี ${name} ` : ''}ชวนมาใช้ "จุกจิก" แอปจดรายรับรายจ่าย อ่านสลิปให้อัตโนมัติ 🐣
+1) เปิด ${APP_URL} แล้วติดตั้งลงหน้าจอ (วิธีติดตั้ง: ${APP_URL}guide.html#sec-install)
+2) ตั้งค่า › สมัคร/เข้าสู่ระบบด้วย Google หรืออีเมลที่ให้ไว้
+3) (ไม่บังคับ) อยากได้ Google Sheet ของตัวเอง: ${TEMPLATE_URL.includes('TEMPLATE_ID') ? APP_URL + 'guide.html#sheet-template' : TEMPLATE_URL}`;
+}
+function ownerCard() {
+  const list = state.allowList;
+  return `<section class="card" id="access"><h3>👥 ใครใช้แอปได้บ้าง</h3>
+    <label class="check"><input type="checkbox" data-input="opensignup" ${state.openSignup ? 'checked' : ''}> เปิดให้ทุกคนที่มีลิงก์ใช้ได้</label>
+    <p class="muted small">${state.openSignup ? '⚠️ ตอนนี้ใครก็สมัครใช้ได้ (ข้อมูลยังแยกกันของใครของมัน)' : `🔒 ใช้ได้เฉพาะคุณ และอีเมลด้านล่าง (${list.length})`}</p>
+    <ul class="allow-list">${list.map(a => `<li><span><b>${esc(a.name || a.email)}</b>${a.name ? `<small>${esc(a.email)}</small>` : ''}</span>
+      <span class="row gap"><button class="link small" data-action="allow-invite" data-e="${esc(a.email)}">ข้อความชวน</button>
+      <button class="x" data-action="allow-remove" data-e="${esc(a.email)}" aria-label="เอาออก ${esc(a.email)}">×</button></span></li>`).join('')
+      || '<li class="muted small">ยังไม่มีใคร เพิ่มอีเมลของคนที่จะชวนได้เลย</li>'}</ul>
+    <form class="row gap wrap" data-form="allow">
+      <input name="email" type="email" placeholder="อีเมลของคนที่ชวน" required class="grow" autocomplete="off">
+      <input name="name" placeholder="ชื่อเล่น (ไม่บังคับ)" class="w-name" autocomplete="off">
+      <button class="btn primary sm">อนุญาต</button>
+    </form>
+    <small class="muted">คนที่สมัครด้วยอีเมล+รหัสผ่านต้องกดยืนยันอีเมลก่อน · บัญชี Google ใช้ได้ทันที</small>
+  </section>`;
 }
 
 function geminiCard() {
@@ -683,7 +731,9 @@ function download(name, text, type) {
 function render() {
   const app = $('#app');
   const onboarding = !prefs.onboarded;
-  document.body.classList.toggle('no-nav', onboarding);
+  const gated = state.mode === 'cloud' && state.access !== 'ok';
+  document.body.classList.toggle('no-nav', onboarding || gated);
+  if (gated && !onboarding) { $('#app').innerHTML = viewGate(); return; }
   const keepScroll = window.scrollY;
   const active = document.activeElement;
   const focusKey = active?.dataset?.input;
@@ -757,6 +807,28 @@ document.addEventListener('click', async e => {
       return;
     }
     case 'signout': if (confirm('ออกจากระบบในเครื่องนี้?')) await S.signOut(); return;
+    case 'gate-recheck':
+      ui.gateMsg = 'กำลังตรวจสอบ…'; render();
+      try { await S.recheckAccess(); ui.gateMsg = state.access === 'ok' ? '' : (state.access === 'verify' ? 'ยังไม่ได้ยืนยันอีเมล ลองกดลิงก์ในอีเมลก่อน' : 'ยังไม่ได้รับอนุญาต'); }
+      catch (err) { ui.gateMsg = err.message; }
+      return render();
+    case 'gate-resend':
+      try { await S.resendVerification(); ui.gateMsg = 'ส่งอีเมลยืนยันอีกครั้งแล้ว'; } catch (err) { ui.gateMsg = err.message; }
+      return render();
+    case 'gate-copy':
+      try { await navigator.clipboard.writeText(state.user?.email || ''); toast('คัดลอกอีเมลแล้ว'); } catch { toast(state.user?.email || ''); }
+      return;
+    case 'allow-remove':
+      if (!confirm(`เอา ${el.dataset.e} ออกจากรายชื่อ? (ข้อมูลของเขายังอยู่ แต่จะเข้าใช้ไม่ได้)`)) return;
+      try { await S.removeEmail(el.dataset.e); toast('เอาออกแล้ว'); } catch (err) { toast('❌ ' + err.message); }
+      return;
+    case 'allow-invite': {
+      const a = state.allowList.find(x => x.email === el.dataset.e);
+      const text = inviteText(a?.name);
+      try { if (navigator.share) await navigator.share({ title: 'ชวนใช้จุกจิก', text }); else { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว ส่งทาง LINE ได้เลย'); } }
+      catch (err) { if (err?.name !== 'AbortError') { try { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว'); } catch { prompt('คัดลอกข้อความนี้', text); } } }
+      return;
+    }
     case 'fbcfg-save': {
       const raw = $('[data-input="fbcfg"]').value.trim();
       try {
@@ -838,6 +910,13 @@ document.addEventListener('submit', async e => {
       toast('เข้าสู่ระบบแล้ว');
     } catch (err) { ui.authError = err.message; }
     ui.authBusy = false; render();
+  } else if (f === 'allow') {
+    const fd = new FormData(e.target);
+    try {
+      await S.allowEmail(fd.get('email'), fd.get('name'));
+      toast(`อนุญาต ${String(fd.get('email')).trim().toLowerCase()} แล้ว · กด “ข้อความชวน” เพื่อส่งลิงก์`);
+      e.target.reset();
+    } catch (err) { toast('❌ ' + err.message); }
   } else if (f === 'cat-edit') {
     const d = catDraft;
     d.name = d.name.trim();
@@ -879,6 +958,10 @@ document.addEventListener('change', async e => {
   const t = e.target;
   switch (t.dataset.input) {
     case 'saveslips': S.saveSettings({ saveSlips: t.checked }); return toast(t.checked ? 'จะเก็บสลิปไว้ใน Google Drive' : 'ปิดการเก็บสลิปแล้ว');
+    case 'opensignup':
+      if (t.checked && !confirm('เปิดให้ทุกคนที่มีลิงก์สมัครใช้ได้? (ข้อมูลยังแยกกันของใครของมัน)')) { t.checked = false; return; }
+      try { await S.setOpenSignup(t.checked); toast(t.checked ? 'เปิดให้ทุกคนใช้ได้แล้ว' : 'จำกัดเฉพาะอีเมลที่อนุญาตแล้ว'); } catch (err) { toast('❌ ' + err.message); }
+      return;
     case 'only30':
       ui.scan.only30 = t.checked;
       ui.scan.items.forEach(it => { if (!it.dup) it.keep = !(t.checked && it.old); });
