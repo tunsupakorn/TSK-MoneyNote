@@ -89,7 +89,8 @@ function viewOnboarding() {
     <div class="dots">${steps.map((_, i) => `<i class="${i === ui.obStep ? 'on' : ''}"></i>`).join('')}</div>
     ${last
       ? `<button class="btn primary big" data-action="ob-done">เริ่มจดเลย</button>
-         <button class="btn ghost" data-action="ob-sync">ตั้งค่าซิงก์ก่อน</button>`
+         <button class="btn ghost" data-action="ob-sync">ตั้งค่าซิงก์ก่อน</button>
+         <a class="link" href="guide.html">📖 อ่านวิธีใช้งานทั้งหมด</a>`
       : `<button class="btn primary big" data-action="ob-next">ถัดไป</button>`}
   </section>`;
 }
@@ -211,7 +212,7 @@ function viewScan() {
       <li>แอปธนาคารส่วนใหญ่บันทึกสลิปลงอัลบั้มให้อัตโนมัติ เปิดอัลบั้มนั้นแล้วเลือกหลายรูปได้เลย</li>
       <li>ใบแจ้งยอดบัตรเครดิตที่มีรหัส PDF ให้ปลดรหัสก่อน (เช่น เปิดแล้วสั่งพิมพ์เป็น PDF ใหม่)</li>
       <li>สลิปที่เคยบันทึกแล้วจะถูกทำเครื่องหมาย "ซ้ำ" และไม่ถูกเลือกให้</li>
-    </ul></section>`;
+    </ul><a class="link" href="guide.html#sec-slip">📖 ดูวิธีใช้แบบละเอียด</a></section>`;
 }
 
 function reviewRow(it, i) {
@@ -303,9 +304,13 @@ function viewSettings() {
       <small class="muted">ทั้งหมด ${state.tx.length} รายการ</small>
     </section>
 
-    <section class="card"><h3>📱 ติดตั้งเป็นแอป</h3>
-      <p class="small">iPhone/iPad: เปิดใน Safari › ปุ่มแชร์ › <b>เพิ่มไปยังหน้าจอโฮม</b><br>Android: Chrome › เมนู ⋮ › <b>ติดตั้งแอป</b></p>
-      <button class="link" data-action="show-ob">ดูแนะนำการใช้งานอีกครั้ง</button>
+    <section class="card"><h3>📖 วิธีใช้งาน</h3>
+      <p class="small">คู่มือทุกฟีเจอร์ ตั้งแต่ติดตั้ง อ่านสลิป บัตรเครดิต งบ ไปจนถึงซิงก์หลายเครื่อง</p>
+      <div class="row gap wrap">
+        <a class="btn primary sm" href="guide.html">เปิดคู่มือ</a>
+        <a class="btn ghost sm" href="guide.html#sec-install">วิธีติดตั้ง</a>
+      </div>
+      <button class="link" data-action="show-ob">ดูหน้าแนะนำแอปอีกครั้ง</button>
     </section>
     <p class="center muted small pad">จุกจิก JukJik v1.0</p>`;
 }

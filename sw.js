@@ -1,6 +1,6 @@
 // JukJik service worker: network-first for the app's own files, cache as offline fallback.
-const CACHE = 'jukjik-v2';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'gemini.js', 'charts.js',
+const CACHE = 'jukjik-v3';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'gemini.js', 'charts.js', 'guide.html',
   'firebase-config.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', e => {

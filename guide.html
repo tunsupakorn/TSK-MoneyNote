@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>วิธีใช้งานจุกจิก</title>
+  <meta name="description" content="คู่มือใช้งานจุกจิก JukJik แอปจดรายรับรายจ่าย อ่านสลิป ใบแจ้งยอดบัตรเครดิต งบประมาณ และซิงก์หลายเครื่อง">
+  <meta name="theme-color" content="#FFC83D">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=Mitr:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    try { var t = JSON.parse(localStorage.getItem('jj_prefs') || '{}').theme;
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <style>
+    .g-top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: max(10px, env(safe-area-inset-top)) 0 10px; display: flex; align-items: center; gap: 10px; }
+    .g-top a.icon-btn { display: grid; place-items: center; text-decoration: none; color: var(--text); flex: none; }
+    .g-top h1 { font-size: 1.2rem; }
+    .g-hero { position: relative; overflow: hidden; border-radius: 26px; padding: 22px; color: #2B2118;
+      background: radial-gradient(120% 140% at 100% 0%, #FFE58A 0%, #FFC83D 45%, #FFB000 100%); box-shadow: 0 12px 32px rgba(255,170,0,.25); }
+    .g-hero small { opacity: .8; }
+    .g-hero h2 { font-size: clamp(1.4rem, 6vw, 1.9rem); line-height: 1.25; margin: 2px 0 6px; max-width: 70%; }
+    .g-hero p { margin: 0; max-width: 68%; font-size: .92rem; }
+    .g-hero img { position: absolute; right: -8px; bottom: -10px; width: 120px; height: 120px; border-radius: 30px; transform: rotate(10deg); }
+    .g-search { margin-top: 14px; }
+    .g-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+    .g-cat { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); text-decoration: none; color: var(--text); }
+    .g-cat:hover { border-color: var(--accent-2); }
+    .g-cat span { font-size: 1.5rem; }
+    .g-cat b { font-family: var(--display); font-weight: 500; }
+    .g-cat small { color: var(--muted); font-size: .78rem; line-height: 1.35; }
+    .g-sec { margin-top: 26px; scroll-margin-top: 70px; }
+    .g-sec-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .g-sec-head span { width: 44px; height: 44px; border-radius: 14px; background: var(--surface-2); display: grid; place-items: center; font-size: 1.4rem; flex: none; }
+    .g-sec-head h2 { font-size: 1.15rem; }
+    .g-sec-head small { display: block; color: var(--muted); font-size: .82rem; }
+    .g-list { display: grid; gap: 8px; }
+    .g-item { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; scroll-margin-top: 70px; }
+    .g-item summary { list-style: none; cursor: pointer; padding: 13px 14px; display: flex; align-items: center; gap: 10px; font-weight: 500; color: var(--text); margin: 0; }
+    .g-item summary::-webkit-details-marker { display: none; }
+    .g-item summary::after { content: '›'; margin-left: auto; font-size: 1.3rem; color: var(--muted); transition: transform .2s; }
+    .g-item[open] summary::after { transform: rotate(90deg); }
+    .g-item[open] { border-color: var(--accent-2); }
+    .g-body { padding: 0 14px 14px; color: var(--text-2); font-size: .94rem; }
+    .g-body p { margin: 0 0 8px; }
+    .g-steps { counter-reset: s; list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 8px; }
+    .g-steps li { counter-increment: s; display: flex; gap: 10px; align-items: flex-start; }
+    .g-steps li::before { content: counter(s); flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+      font-weight: 600; font-size: .8rem; display: grid; place-items: center; margin-top: 1px; }
+    .g-tip { background: var(--surface-2); border-radius: 12px; padding: 9px 12px; font-size: .88rem; margin-top: 8px; }
+    .g-body b { color: var(--text); font-weight: 500; }
+    .g-body kbd { font-family: inherit; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: .85em; white-space: nowrap; }
+    .g-copy { margin-left: auto; font-size: .78rem; }
+    .g-empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+    .g-cta { margin-top: 26px; text-align: center; }
+    mark { background: rgba(255, 200, 61, .45); color: inherit; border-radius: 3px; }
+  </style>
+</head>
+<body class="no-nav">
+  <main class="app">
+    <header class="g-top">
+      <a class="icon-btn" href="./" aria-label="กลับไปที่แอป">‹</a>
+      <h1>วิธีใช้งาน</h1>
+    </header>
+
+    <section class="g-hero">
+      <small>คู่มือจุกจิก</small>
+      <h2>จุกจิกทำอะไรได้บ้าง?</h2>
+      <p>อ่านสลิป จดบัตรเครดิต ตั้งงบ ดูสรุป และซิงก์ทุกเครื่อง ครบในแอปเดียว</p>
+      <img src="icons/icon.svg" alt="">
+    </section>
+
+    <label class="search g-search"><span aria-hidden="true">🔍</span>
+      <input type="search" id="q" placeholder="ค้นหาวิธีใช้ เช่น สลิป, งบ, ซิงก์" autocomplete="off"></label>
+
+    <nav class="g-cats" id="cats" aria-label="หมวดคู่มือ"></nav>
+    <div id="sections"></div>
+    <p class="g-empty" id="empty" hidden>ไม่พบหัวข้อที่ค้นหา ลองใช้คำอื่นดูนะ</p>
+
+    <section class="g-cta">
+      <a class="btn primary big" href="./">กลับไปจดเลย 🐣</a>
+    </section>
+    <p class="center muted small pad">จุกจิก JukJik</p>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+const GUIDE = [
+  { id: 'install', icon: '📲', title: 'วิธีติดตั้ง', sub: 'มือถือ แท็บเล็ต คอมพิวเตอร์', items: [
+    { id: 'install-what', q: 'จุกจิกติดตั้งอย่างไร? ไม่มีใน App Store เหรอ', body:
+      '<p>จุกจิกเป็น <b>เว็บแอป (PWA)</b> ติดตั้งจากเบราว์เซอร์ได้เลย ไม่ต้องผ่าน App Store หรือ Play Store ติดตั้งแล้วจะมี<b>ไอคอนลูกเจี๊ยบบนหน้าจอ</b> เปิดเต็มจอเหมือนแอปทั่วไป ใช้ออฟไลน์ได้ และอัปเดตเองอัตโนมัติ</p><p>ลิงก์ติดตั้ง: <b>tunsupakorn.github.io/jukjik</b></p>' },
+    { id: 'install-ios', q: 'ติดตั้งบน iPhone', steps: [
+      'เปิดแอป <b>Safari</b> (เข็มทิศสีฟ้า) แล้วเข้า <b>tunsupakorn.github.io/jukjik</b>',
+      'แตะปุ่ม <b>แชร์</b> ด้านล่าง (สี่เหลี่ยมมีลูกศรชี้ขึ้น)',
+      'เลื่อนลงแล้วแตะ <b>เพิ่มไปยังหน้าจอโฮม</b>',
+      'ชื่อจะขึ้นว่า “จุกจิก” แตะ <b>เพิ่ม</b> มุมขวาบน',
+      'กลับไปหน้าจอโฮม แตะไอคอนลูกเจี๊ยบเพื่อเปิดแอป'],
+      tip: 'ใช้ Safari จะง่ายที่สุด ถ้าเปิดใน Chrome หรือแอปอื่น (เช่น เปิดลิงก์จาก LINE) ให้กด ⋯ แล้วเลือก “เปิดใน Safari” ก่อน' },
+    { id: 'install-ipad', q: 'ติดตั้งบน iPad', steps: [
+      'เปิด <b>Safari</b> แล้วเข้า <b>tunsupakorn.github.io/jukjik</b>',
+      'แตะปุ่ม <b>แชร์</b> ที่แถบด้านบน ข้างช่องที่อยู่เว็บ',
+      'แตะ <b>เพิ่มไปยังหน้าจอโฮม</b> แล้วแตะ <b>เพิ่ม</b>'],
+      tip: 'บน iPad หน้าจอกว้าง แอปจะจัดหน้าให้อยู่ตรงกลางอ่านสบาย หมุนจอแนวนอนได้' },
+    { id: 'install-android', q: 'ติดตั้งบนมือถือ / แท็บเล็ต Android', steps: [
+      'เปิด <b>Chrome</b> แล้วเข้า <b>tunsupakorn.github.io/jukjik</b>',
+      'ถ้ามีแถบ <b>ติดตั้งแอป</b> เด้งขึ้นด้านล่าง แตะได้เลย',
+      'ถ้าไม่มี แตะเมนู <kbd>⋮</kbd> มุมขวาบน แล้วเลือก <b>ติดตั้งแอป</b> หรือ <b>เพิ่มลงในหน้าจอหลัก</b>',
+      'แตะ <b>ติดตั้ง</b> ไอคอนจะขึ้นในหน้าจอหลักและในลิ้นชักแอป'] },
+    { id: 'install-samsung', q: 'ติดตั้งด้วย Samsung Internet', steps: [
+      'เปิด <b>Samsung Internet</b> แล้วเข้า <b>tunsupakorn.github.io/jukjik</b>',
+      'แตะเมนู <kbd>☰</kbd> ด้านล่าง',
+      'แตะ <b>เพิ่มหน้าไปยัง</b> › <b>หน้าจอหลัก</b>'] },
+    { id: 'install-pc', q: 'ติดตั้งบนคอมพิวเตอร์ Windows / Mac', steps: [
+      'เปิด <b>Chrome</b> หรือ <b>Microsoft Edge</b> แล้วเข้า <b>tunsupakorn.github.io/jukjik</b>',
+      'คลิกไอคอน <b>ติดตั้ง</b> (จอคอมมีลูกศรลง) ที่ท้ายช่องที่อยู่เว็บ',
+      'หรือเมนู <kbd>⋮</kbd> › <b>บันทึกและแชร์</b> › <b>ติดตั้งหน้าเว็บเป็นแอป</b> (Edge: <kbd>⋯</kbd> › <b>แอป</b> › <b>ติดตั้งไซต์นี้เป็นแอป</b>)',
+      'คลิก <b>ติดตั้ง</b> จุกจิกจะเปิดเป็นหน้าต่างของตัวเอง และอยู่ใน Start menu / Launchpad'],
+      tip: 'บน Mac ใช้ Safari ได้เช่นกัน: เมนู ไฟล์ › เพิ่มไปยัง Dock' },
+    { id: 'install-after', q: 'ติดตั้งเสร็จแล้ว ทำอะไรต่อ?', steps: [
+      'เปิดแอป แล้วดูหน้าแนะนำ 4 หน้า (หรือกด <b>ข้าม</b>)',
+      '<b>ล็อกอิน</b> เพื่อซิงก์ทุกเครื่อง (ดูหัวข้อ “สมัครบัญชีและล็อกอิน”)',
+      'ใส่ <b>Gemini API key</b> เพื่อให้อ่านสลิปได้ (ดูหัวข้อ “ใส่ Gemini API key”)',
+      'เริ่มจด! กด <b>+</b> หรือไปที่ <b>🧾 อ่านสลิป</b>'] },
+    { id: 'install-update', q: 'อัปเดตแอปอย่างไร?', body:
+      '<p>ไม่ต้องทำอะไร แอปอัปเดตเองอัตโนมัติเมื่อเปิดตอนมีอินเทอร์เน็ต ถ้าอยากได้เวอร์ชันใหม่ทันที ให้<b>ปิดแอปให้สนิท</b> (ปัดทิ้งจากหน้าสลับแอป) แล้วเปิดใหม่ 1–2 ครั้ง</p>' },
+    { id: 'install-missing', q: 'ไม่เห็นปุ่ม “เพิ่มไปยังหน้าจอโฮม” / “ติดตั้งแอป”', body:
+      '<ul><li><b>iPhone/iPad:</b> ต้องเปิดใน Safari ไม่ใช่ในแอป LINE, Facebook หรือ Chrome และต้องไม่ใช่โหมดส่วนตัว (Private)</li><li><b>Android:</b> ใช้ Chrome หรือ Samsung Internet เวอร์ชันล่าสุด ถ้าเคยติดตั้งไว้แล้ว ปุ่มจะไม่ขึ้นซ้ำ ให้ดูในลิ้นชักแอป</li><li><b>คอมพิวเตอร์:</b> Firefox ยังติดตั้งเป็นแอปไม่ได้ ให้ใช้ Chrome หรือ Edge</li></ul>' },
+    { id: 'install-remove', q: 'ลบแอปออกจากเครื่อง', body:
+      '<ul><li><b>iPhone/iPad:</b> กดค้างที่ไอคอน › <b>ลบแอป</b></li><li><b>Android:</b> กดค้างที่ไอคอน › <b>ถอนการติดตั้ง</b></li><li><b>คอมพิวเตอร์:</b> เปิดแอป › เมนู <kbd>⋯</kbd> › <b>ถอนการติดตั้ง</b></li></ul><p>ถ้าล็อกอินไว้ ข้อมูลยังอยู่ในบัญชี ติดตั้งใหม่แล้วล็อกอินกลับมาได้ทันที</p>' },
+  ]},
+  { id: 'start', icon: '🐣', title: 'เริ่มใช้จุกจิก', sub: 'สมัคร ล็อกอิน และเริ่มจด', items: [
+    { id: 'signup', q: 'สมัครบัญชีและล็อกอิน', steps: [
+      'ไปที่แท็บ <b>⚙️ ตั้งค่า</b> › การ์ด <b>บัญชีและการซิงก์</b>',
+      'กด <b>ยังไม่มีบัญชี? สมัครใหม่</b> แล้วกรอกอีเมลกับรหัสผ่าน (6 ตัวขึ้นไป)',
+      'หรือกด <b>เข้าสู่ระบบด้วย Google</b>',
+      'เครื่องต่อไป แค่กด <b>เข้าสู่ระบบ</b> ด้วยบัญชีเดิม'],
+      tip: 'ไม่ต้องใช้เบอร์มือถือหรือรหัส OTP ถ้าเปิดจากหน้าจอโฮมของ iPhone แล้วปุ่ม Google ไม่ทำงาน ให้ใช้อีเมลแทน' },
+    { id: 'offline', q: 'ใช้งานตอนไม่มีเน็ตได้ไหม?', body:
+      '<p>ได้ จดรายการ แก้ไข และดูสรุปได้ตามปกติ พอกลับมาออนไลน์ แอปจะซิงก์ขึ้นบัญชีให้เอง (มุมขวาบนจะขึ้น “กำลังซิงก์…” แล้วเปลี่ยนเป็น “ซิงก์แล้ว”)</p><p>ยกเว้นการอ่านสลิป ที่ต้องใช้อินเทอร์เน็ต</p>' },
+    { id: 'replay', q: 'ดูหน้าแนะนำแอปอีกครั้ง', steps: ['ไปที่ <b>⚙️ ตั้งค่า</b> › การ์ด <b>ติดตั้งเป็นแอป</b>', 'กด <b>ดูแนะนำการใช้งานอีกครั้ง</b>'] },
+  ]},
+  { id: 'slip', icon: '🧾', title: 'จดอัตโนมัติจากสลิป', sub: 'ส่งสลิป จุกจิกอ่านให้', items: [
+    { id: 'gemini-key', q: 'ใส่ Gemini API key (ทำครั้งเดียวต่อเครื่อง)', steps: [
+      'เข้า <b>aistudio.google.com/apikey</b> ด้วยบัญชี Google แล้วกด <b>Create API key</b>',
+      'คัดลอก key ที่ได้',
+      'ในจุกจิก ไปที่ <b>⚙️ ตั้งค่า</b> › <b>Gemini (อ่านสลิป)</b> แล้ววาง key',
+      'กด <b>ทดสอบ key</b> ต้องขึ้น ✅ key ใช้งานได้'],
+      tip: 'สร้าง key ได้ฟรี และมีโควตาพอสำหรับใช้ส่วนตัว key เก็บไว้ในเครื่องนั้นเท่านั้น จึงต้องใส่ในแต่ละเครื่อง' },
+    { id: 'read-slips', q: 'อ่านสลิปทีละหลายใบ', steps: [
+      'ไปที่แท็บ <b>🧾 อ่านสลิป</b>',
+      'แตะกรอบ <b>เลือกสลิป หรือใบแจ้งยอดบัตรเครดิต</b>',
+      'เปิดอัลบั้มที่แอปธนาคารบันทึกสลิปไว้ แล้วเลือกได้หลายรูปพร้อมกัน',
+      'รอจุกจิกอ่าน (มีแถบบอกว่าอ่านไปกี่ใบแล้ว)',
+      'ตรวจรายการ แล้วกด <b>บันทึก N รายการ</b>'] },
+    { id: 'banks', q: 'รองรับสลิปจากแอปไหนบ้าง?', body:
+      '<p>อ่านได้<b>ทุกธนาคาร</b> เพราะใช้ AI อ่านจากรูป ไม่ได้จำกัดเฉพาะบางแอป เช่น K PLUS, SCB EASY, Krungthai NEXT, Bangkok Bank, krungsri, ttb, GSB, พร้อมเพย์ และ e-wallet ที่มีหน้าสลิป</p><p>รวมถึงใบเสร็จร้านค้าที่ถ่ายรูปมาด้วย</p>' },
+    { id: 'last30', q: 'เลือกเฉพาะสลิป 30 วันล่าสุด', body:
+      '<p>ถ้าติ๊ก <b>เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</b> ไว้ (ค่าเริ่มต้น) สลิปที่เก่ากว่า 30 วันจะขึ้นป้าย <b>เกิน 30 วัน</b> และไม่ถูกเลือกไว้</p><p>ถ้าต้องการบันทึกสลิปเก่าด้วย ให้ติ๊กเลือกรายการนั้นเอง หรือเอาเครื่องหมายช่องนี้ออก</p>' },
+    { id: 'dup', q: 'สลิปซ้ำ จะถูกบันทึกสองครั้งไหม?', body:
+      '<p>ไม่ จุกจิกเช็กจาก<b>เลขอ้างอิง</b>ในสลิป และจาก<b>วันที่ เวลา ยอด และผู้รับ</b> ถ้าตรงกับรายการที่มีอยู่แล้ว จะขึ้นป้ายสีส้ม <b>ซ้ำ</b> และไม่ถูกเลือกไว้</p>' },
+    { id: 'review', q: 'แก้ไขก่อนบันทึก', body:
+      '<p>ในหน้า <b>ตรวจก่อนบันทึก</b> แต่ละรายการแก้ได้ทันที:</p><ul><li>ประเภท รายจ่าย / รายรับ</li><li>จำนวนเงิน</li><li>หมวดหมู่</li><li>วันที่</li></ul><p>รายการที่ไม่ต้องการ ให้เอาเครื่องหมายถูกออก แล้วกดบันทึก ถ้าอยากเริ่มใหม่ทั้งหมด กด <b>ล้าง</b></p>' },
+    { id: 'slip-fail', q: 'อ่านสลิปไม่สำเร็จ ทำอย่างไร?', body:
+      '<p>ดูข้อความในกรอบสีแดงใต้ปุ่มเลือกไฟล์:</p><ul><li><b>API key ไม่ถูกต้อง</b> – ใส่ key ใหม่ในตั้งค่า</li><li><b>ใช้เกินโควตาฟรีชั่วคราว</b> – รอสักครู่แล้วลองใหม่</li><li><b>ไม่พบรายการเงินในไฟล์นี้</b> – รูปอาจไม่ใช่สลิป หรือภาพไม่ชัด</li><li><b>โมเดลใช้ไม่ได้แล้ว</b> – โดยปกติแอปจะเปลี่ยนรุ่นให้เอง ถ้าไม่หาย ให้แก้ช่อง <b>โมเดล</b> ในตั้งค่า</li></ul>' },
+  ]},
+  { id: 'card', icon: '💳', title: 'จดบัตรเครดิต', sub: 'อ่านใบแจ้งยอดให้ทั้งฉบับ', items: [
+    { id: 'statement', q: 'อัปโหลดใบแจ้งยอดบัตรเครดิต', steps: [
+      'ดาวน์โหลดใบแจ้งยอด (e-Statement) เป็นไฟล์ <b>PDF</b> จากอีเมลหรือแอปธนาคาร',
+      'ไปที่แท็บ <b>🧾 อ่านสลิป</b> แล้วเลือกไฟล์ PDF',
+      'จุกจิกจะแยกทุกรายการในใบแจ้งยอดออกมาให้ตรวจ',
+      'กด <b>บันทึก</b>'],
+      tip: 'ใบแจ้งยอดแบบกระดาษก็ใช้ได้ ถ่ายรูปทีละหน้าแล้วเลือกพร้อมกันหลายรูป' },
+    { id: 'pdf-password', q: 'PDF ใบแจ้งยอดมีรหัสผ่าน', steps: [
+      'เปิด PDF ในเครื่อง แล้วใส่รหัส (มักเป็นวันเดือนปีเกิด)',
+      'สั่ง <b>พิมพ์</b> แล้วเลือก <b>บันทึกเป็น PDF</b> จะได้ไฟล์ใหม่ที่ไม่มีรหัส',
+      'เลือกไฟล์ใหม่นั้นในจุกจิก'] },
+    { id: 'card-rules', q: 'จุกจิกจดรายการบัตรอย่างไร?', body:
+      '<ul><li><b>รายการซื้อ</b> → รายจ่าย ช่องทางบัตร</li><li><b>ยอดผ่อน</b> (เช่น 3/10) → รายจ่าย พร้อมโน้ตงวดผ่อน</li><li><b>ดอกเบี้ย / ค่าธรรมเนียม</b> → หมวด 🧾 ค่าธรรมเนียม/ดอกเบี้ย</li><li><b>เงินคืน / Cashback / คืนเงิน</b> → รายรับ หมวด 🔁 เงินคืน</li><li><b>ยอดที่คุณจ่ายคืนบัตร</b> → ไม่นับ เพื่อไม่ให้รายจ่ายซ้ำกับรายการซื้อ</li></ul>' },
+  ]},
+  { id: 'manual', icon: '✍️', title: 'จดเพิ่มเอง', sub: 'สำหรับรายการไม่มีสลิป', items: [
+    { id: 'add-cash', q: 'จดรายจ่ายเงินสด', steps: [
+      'กดปุ่ม <b>+</b> สีเหลืองตรงกลางด้านล่าง',
+      'ใส่จำนวนเงิน',
+      'เลือกหมวด เช่น 🍜 อาหาร',
+      'เลือกวันที่และช่องทาง (เงินสด / โอน / บัตร) ใส่โน้ตถ้าต้องการ',
+      'กด <b>บันทึก</b>'] },
+    { id: 'add-income', q: 'จดรายรับ', steps: ['กดปุ่ม <b>+</b>', 'แตะแท็บ <b>รายรับ</b> ด้านบน', 'ใส่ยอด เลือกหมวด เช่น 💼 เงินเดือน แล้วกด <b>บันทึก</b>'] },
+    { id: 'edit', q: 'แก้ไขหรือลบรายการ', steps: ['ในหน้าหลัก แตะรายการที่ต้องการ', 'แก้ข้อมูลแล้วกด <b>บันทึก</b>', 'ถ้าจะลบ กด <b>ลบ</b> แล้วยืนยัน'] },
+  ]},
+  { id: 'track', icon: '🗂️', title: 'ติดตามการใช้จ่าย', sub: 'ค้นหา ย้อนดู จัดหมวด', items: [
+    { id: 'search', q: 'ค้นหารายการ', body: '<p>ในหน้าหลัก พิมพ์ในช่อง <b>🔍 ค้นหารายการ</b> ค้นได้ทั้งชื่อหมวด ชื่อร้าน/ผู้รับ โน้ต และจำนวนเงิน</p>' },
+    { id: 'months', q: 'ดูรายการเดือนก่อนๆ', body: '<p>กดลูกศร <kbd>‹</kbd> <kbd>›</kbd> ข้างชื่อเดือน ใช้ได้ทั้งหน้าหลักและหน้าสรุป</p>' },
+    { id: 'new-cat', q: 'สร้างหมวดหมู่ใหม่', steps: ['ไปที่ <b>⚙️ ตั้งค่า</b> › <b>หมวดหมู่</b>', 'ใส่อีโมจิ ชื่อหมวด และเลือก รายจ่าย / รายรับ', 'กด <b>เพิ่ม</b>'] },
+    { id: 'del-cat', q: 'ลบหมวดหมู่', body: '<p>กด <b>×</b> ที่หมวดที่สร้างเอง (หมวดเริ่มต้นลบไม่ได้) รายการเก่าในหมวดนั้นจะยังอยู่ แต่จะแสดงเป็น “ไม่ระบุ”</p>' },
+  ]},
+  { id: 'budget', icon: '🎯', title: 'วางแผนการเงิน', sub: 'ตั้งงบ คุมรายจ่าย', items: [
+    { id: 'set-budget', q: 'ตั้งงบรายเดือน', steps: ['ไปที่ <b>⚙️ ตั้งค่า</b> › <b>งบประมาณรายเดือน</b>', 'ใส่ยอด เช่น 15000', 'กด <b>บันทึก</b> หน้าหลักจะมีการ์ดงบขึ้นมา'] },
+    { id: 'read-budget', q: 'อ่านการ์ดงบ', body:
+      '<ul><li><b>แถบสีเหลือง</b> – ยังอยู่ในงบ</li><li><b>แถบสีส้ม</b> – ใช้ไปเกิน 80%</li><li><b>แถบสีแดง</b> – ใช้เกินงบแล้ว พร้อมบอกยอดที่เกิน</li></ul><p>ในเดือนปัจจุบัน การ์ดจะบอกด้วยว่าเหลือ <b>ใช้ได้วันละเท่าไหร่</b> จนถึงสิ้นเดือน</p>' },
+    { id: 'off-budget', q: 'ปิดการแสดงงบ', body: '<p>ใส่ <b>0</b> ในช่องงบแล้วกดบันทึก</p>' },
+  ]},
+  { id: 'summary', icon: '📊', title: 'ดูสรุป', sub: 'เห็นภาพรวมทันที', items: [
+    { id: 'monthly', q: 'สรุปรายเดือน', body: '<p>แท็บ <b>📊 สรุป</b> สลับดูได้ทั้ง <b>รายจ่าย</b> และ <b>รายรับ</b> มีตัวเลขรวมทั้งเดือน เฉลี่ยต่อวัน และจำนวนรายการ</p>' },
+    { id: 'daily-chart', q: 'กราฟรายวัน', body: '<p>แตะหรือชี้ที่แท่งกราฟ เพื่อดูยอดของวันนั้น</p>' },
+    { id: 'by-cat', q: 'สรุปแยกหมวด และช่องทาง', body: '<p>เรียงหมวดจากใช้มากไปน้อย พร้อมเปอร์เซ็นต์ ด้านล่างมีสรุปตามช่องทาง เงินสด / โอน / บัตร</p>' },
+  ]},
+  { id: 'account', icon: '🔄', title: 'ซิงก์และข้อมูล', sub: 'หลายเครื่อง สำรอง ส่งออก', items: [
+    { id: 'sync', q: 'ซิงก์หลายเครื่อง', body: '<p>ล็อกอินบัญชีเดียวกันในทุกเครื่อง รายการที่จดในเครื่องหนึ่งจะขึ้นในเครื่องอื่นภายในไม่กี่วินาที</p>' },
+    { id: 'sync-status', q: 'ความหมายของจุดสีมุมขวาบน', body:
+      '<ul><li>🟢 <b>ซิงก์แล้ว</b> – ข้อมูลตรงกันทุกเครื่อง</li><li>🟡 <b>กำลังซิงก์…</b> – กำลังส่งข้อมูล หรือยังออฟไลน์อยู่</li><li>🟠 <b>ยังไม่ล็อกอิน</b> – ข้อมูลอยู่แค่ในเครื่องนี้</li><li>🔴 <b>ซิงก์ผิดพลาด</b> – แตะเพื่อดูสาเหตุในหน้าตั้งค่า</li></ul>' },
+    { id: 'upload-local', q: 'จดไว้ก่อนล็อกอิน จะหายไหม?', body: '<p>ไม่หาย หลังล็อกอิน หน้าหลักจะถามว่า <b>อัปขึ้นบัญชี</b> ไหม กดอัปขึ้นบัญชี แล้วรายการจะไปอยู่ในบัญชีและซิงก์ทุกเครื่อง</p>' },
+    { id: 'backup', q: 'สำรองข้อมูล / ส่งออกเป็น Excel', body:
+      '<p>ไปที่ <b>⚙️ ตั้งค่า</b> › <b>ข้อมูล</b>:</p><ul><li><b>สำรอง (JSON)</b> – เก็บไว้กู้คืนภายหลัง ด้วยปุ่ม <b>นำเข้า JSON</b></li><li><b>ส่งออก CSV</b> – เปิดใน Excel หรือ Google Sheets ได้ ภาษาไทยไม่เพี้ยน</li></ul>' },
+    { id: 'forgot', q: 'ลืมรหัสผ่าน', steps: ['ในหน้าล็อกอิน กรอกอีเมลก่อน', 'กด <b>ลืมรหัสผ่าน</b>', 'เปิดลิงก์ในอีเมลเพื่อตั้งรหัสใหม่'] },
+    { id: 'theme', q: 'เปลี่ยนธีม สว่าง / มืด', body: '<p><b>⚙️ ตั้งค่า</b> › <b>ธีม</b> เลือก ตามเครื่อง / สว่าง / มืด</p>' },
+  ]},
+  { id: 'faq', icon: '💬', title: 'คำถามที่พบบ่อย', sub: 'ความปลอดภัย ค่าใช้จ่าย', items: [
+    { id: 'safe', q: 'ข้อมูลการเงินของฉันปลอดภัยไหม?', body: '<p>ข้อมูลเก็บในฐานข้อมูล Firebase ที่กรุงเทพฯ ตั้งกฎไว้ว่า<b>แต่ละบัญชีเห็นเฉพาะข้อมูลของตัวเอง</b> คนอื่นเปิดดูไม่ได้ แม้จะรู้ลิงก์แอปก็ตาม</p>' },
+    { id: 'cost', q: 'ต้องเสียเงินไหม?', body: '<p>ไม่ต้อง ทุกส่วนใช้แผนฟรี ทั้งเว็บ (GitHub Pages), ฐานข้อมูล (Firebase Spark) และการอ่านสลิป (โควตาฟรีของ Gemini) ซึ่งพอสำหรับใช้ส่วนตัว</p>' },
+    { id: 'gemini-privacy', q: 'รูปสลิปถูกส่งไปที่ไหน?', body: '<p>รูปสลิปถูกส่งไปให้ Gemini ของ Google อ่านเฉพาะตอนที่คุณกดเลือกไฟล์ จุกจิกไม่เก็บรูปไว้ เก็บแค่ตัวเลขและข้อความที่อ่านได้</p>' },
+    { id: 'delete-app', q: 'ลบแอปออกจากเครื่อง ข้อมูลจะหายไหม?', body: '<p>ถ้าล็อกอินไว้ ข้อมูลไม่หาย ติดตั้งใหม่แล้วล็อกอินบัญชีเดิมได้เลย แต่ถ้าไม่เคยล็อกอิน ข้อมูลอยู่แค่ในเครื่อง ควรกด <b>สำรอง (JSON)</b> ไว้ก่อน</p>' },
+  ]},
+];
+
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const strip = html => html.replace(/<[^>]+>/g, ' ');
+
+function itemHTML(it) {
+  const body = (it.steps ? `<ol class="g-steps">${it.steps.map(s => `<li><span>${s}</span></li>`).join('')}</ol>` : '')
+    + (it.body || '') + (it.tip ? `<p class="g-tip">💡 ${it.tip}</p>` : '');
+  return `<details class="g-item" id="${it.id}"><summary>${it.q}</summary><div class="g-body">${body}
+    <button class="link g-copy" data-copy="${it.id}">🔗 คัดลอกลิงก์หัวข้อนี้</button></div></details>`;
+}
+
+function render(q = '') {
+  const needle = q.trim().toLowerCase();
+  const match = it => !needle || (it.q + ' ' + strip(it.body || '') + ' ' + (it.steps || []).map(strip).join(' ') + ' ' + (it.tip || '')).toLowerCase().includes(needle);
+  let any = false;
+  $('#sections').innerHTML = GUIDE.map(sec => {
+    const items = sec.items.filter(match);
+    if (!items.length) return '';
+    any = true;
+    return `<section class="g-sec" id="sec-${sec.id}">
+      <div class="g-sec-head"><span aria-hidden="true">${sec.icon}</span><div><h2>${sec.title}</h2><small>${sec.sub}</small></div></div>
+      <div class="g-list">${items.map(itemHTML).join('')}</div></section>`;
+  }).join('');
+  $('#empty').hidden = any;
+  $('#cats').hidden = !!needle;
+  if (needle) document.querySelectorAll('.g-item').forEach(d => d.open = true);
+}
+
+$('#cats').innerHTML = GUIDE.map(s => `<a class="g-cat" href="#sec-${s.id}"><span aria-hidden="true">${s.icon}</span><b>${s.title}</b><small>${s.sub}</small></a>`).join('');
+render();
+$('#q').addEventListener('input', e => render(e.target.value));
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  const url = location.href.split('#')[0] + '#' + b.dataset.copy;
+  const done = () => { const t = $('#toast'); t.textContent = 'คัดลอกลิงก์แล้ว'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); };
+  (navigator.clipboard?.writeText(url) || Promise.reject()).then(done).catch(() => { prompt('คัดลอกลิงก์นี้', url); });
+});
+
+// open a topic from a #link
+function openHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  const el = id && document.getElementById(id);
+  if (el && el.tagName === 'DETAILS') { el.open = true; setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
+}
+window.addEventListener('hashchange', openHash);
+openHash();
+</script>
+</body>
+</html>
