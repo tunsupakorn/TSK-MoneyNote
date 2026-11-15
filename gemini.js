@@ -62,12 +62,20 @@ const SCHEMA = {
           date: { type: 'STRING', description: 'YYYY-MM-DD, Gregorian calendar' },
           time: { type: 'STRING', description: 'HH:MM if visible' },
           amount: { type: 'NUMBER', description: 'positive number in THB' },
-          type: { type: 'STRING', enum: ['expense', 'income'] },
+          type: { type: 'STRING', enum: ['expense', 'income', 'transfer'] },
           category: { type: 'STRING' },
-          merchant: { type: 'STRING', description: 'recipient, shop or merchant name' },
+          merchant: { type: 'STRING', description: 'recipient, shop, biller or merchant name' },
           note: { type: 'STRING' },
           ref: { type: 'STRING', description: 'transaction/reference number if visible' },
           method: { type: 'STRING', enum: ['transfer', 'card', 'cash'] },
+          from_name: { type: 'STRING', description: 'sender name exactly as printed (may be masked, e.g. นายศุภกร น***)' },
+          from_bank: { type: 'STRING' },
+          from_account: { type: 'STRING', description: 'sender account as printed, e.g. XXX-X-XX563-1' },
+          to_name: { type: 'STRING', description: 'recipient name exactly as printed' },
+          to_bank: { type: 'STRING' },
+          to_account: { type: 'STRING' },
+          fee: { type: 'NUMBER', description: 'transfer/payment fee in THB, 0 if none' },
+          bill_ref: { type: 'STRING', description: 'customer/meter/phone number for utility or phone bills' },
         },
         required: ['date', 'amount', 'type', 'category'],
       },
@@ -76,45 +84,111 @@ const SCHEMA = {
   required: ['kind', 'transactions'],
 };
 
-function prompt(categories, today) {
+function prompt(categories, today, ownerNames) {
   const cats = categories.map(c => `${c.id} (${c.type}: ${c.name})`).join(', ');
+  const owner = ownerNames.length ? ownerNames.join(' / ') : '(unknown — infer from the slip)';
   return `You extract money transactions for a Thai personal expense app. Today is ${today}.
-The file is a Thai bank transfer slip (e-slip), a payment receipt, or a credit card statement.
-Rules:
-- Slip or receipt: return exactly one transaction. Money sent out by the owner is "expense"; a slip clearly showing money received is "income". method = "transfer" for slips.
-- Credit card statement: return every purchase line as "expense" with method "card". Interest, fees and late charges are separate "expense" items with category "fee". Installment lines (e.g. 3/10) are expenses; put the installment info in note. Cashback, refunds and reversals are "income" with category "refund". SKIP payments made to the card itself (e.g. "PAYMENT", "ชำระเงิน", "ขอบคุณสำหรับการชำระ") and skip previous-balance/total lines.
-- Thai slips often use the Buddhist year (e.g. 2569 or "69"): subtract 543 to get the Gregorian year. Output dates as YYYY-MM-DD. If the year is missing, pick the most recent date not after today.
-- amount is always a positive number in baht without currency symbols.
-- category must be one of these ids: ${cats}. Choose the best match from the merchant/recipient name; use "exp_other" or "inc_other" when unsure.
-- merchant: the recipient or shop name as printed. ref: the reference/transaction number if visible.
+The app owner's name(s): ${owner}.
+The file is a Thai bank transfer slip (e-slip), a bill/payment receipt, or a credit card statement.
+
+TYPE rules for slips and receipts (return exactly one transaction, method "transfer" unless it says card/cash):
+- "transfer" = moving money between the owner's OWN accounts: sender and recipient are the same person
+  (same first name, same surname or matching surname initial; masked names like "นายศุภกร น***" match "นายศุภกร นิตยวรรณ"),
+  or both match the owner's name. Also "transfer" when topping up the owner's own e-wallet/savings/investment account,
+  and when paying the owner's own credit card bill (recipient is a card issuer, e.g. KTC, บัตรเครดิต, Credit Card) —
+  put "ชำระบัตรเครดิต" in note. For transfers set category "transfer".
+- "expense" = money sent from the owner to someone else, or a bill/shop payment.
+- "income" = money received by the owner from someone else (recipient is the owner, sender is another person).
+- Always fill from_name/from_bank/from_account and to_name/to_bank/to_account exactly as printed when visible.
+- fee = the fee (ค่าธรรมเนียม) if printed, else 0. amount must NOT include the fee.
+
+BILLS and receipts — pick the most specific category:
+- Electricity: การไฟฟ้านครหลวง / MEA, การไฟฟ้าส่วนภูมิภาค / PEA → "electric".
+- Water: การประปานครหลวง / MWA, การประปาส่วนภูมิภาค / PWA → "water".
+- Internet: 3BB, AIS Fibre, True Online, NT broadband, TOT → "internet".
+- Mobile phone: AIS, True, dtac, NT mobile top-up or postpaid bill → "phone".
+- Put the account/meter/phone number in bill_ref and the billing period in note when printed.
+
+Credit card statement (kind "statement"): return every purchase line as "expense" with method "card". Interest, fees and
+late charges are separate "expense" items with category "fee". Installments (e.g. 3/10) are expenses; put the installment
+info in note. Cashback, refunds and reversals are "income" with category "refund". SKIP payments made to the card itself
+("PAYMENT", "ชำระเงิน", "ขอบคุณสำหรับการชำระ") and previous-balance/total lines.
+
+General:
+- Thai dates often use the Buddhist year (e.g. 2569 or "69"): subtract 543. Output YYYY-MM-DD. Thai months: ม.ค.=01 ก.พ.=02 มี.ค.=03 เม.ย.=04 พ.ค.=05 มิ.ย.=06 ก.ค.=07 ส.ค.=08 ก.ย.=09 ต.ค.=10 พ.ย.=11 ธ.ค.=12. If the year is missing, use the most recent date not after today.
+- amount is a positive number in baht without currency symbols.
+- category must be one of these ids: ${cats}, or "transfer". Use "exp_other" / "inc_other" when unsure.
+- merchant: recipient, biller or shop name as printed. ref: the reference/transaction number (รหัสอ้างอิง / เลขที่รายการ).
 - If the file contains no transaction, return an empty transactions array with kind "other".`;
 }
 
-export async function readFile(file, { key, model, categories, today }) {
+// "นายศุภกร น***" vs "นายศุภกร นิตยวรรณ" → same person (title-less first name equal, surname initial equal)
+const TITLES = /^(นาย|นางสาว|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.|mr\.?|mrs\.?|ms\.?|miss)\s*/i;
+function nameParts(s) {
+  const parts = String(s || '').trim().replace(TITLES, '').replace(/\s+/g, ' ').toLowerCase().split(' ');
+  return { first: parts[0] || '', last: (parts[1] || '').replace(/[*xX.]+$/, '') };
+}
+export function samePerson(a, b) {
+  const x = nameParts(a), y = nameParts(b);
+  if (!x.first || !y.first || x.first !== y.first) return false;
+  if (!x.last || !y.last) return true;
+  return x.last.startsWith(y.last) || y.last.startsWith(x.last);
+}
+const isOwner = (name, owners) => owners.some(o => samePerson(name, o));
+const acct = (bank, no) => [bank, no].filter(Boolean).join(' ');
+
+export async function readFile(file, { key, model, categories, today, ownerNames = [] }) {
   if (!key) throw new Error('ยังไม่ได้ใส่ Gemini API key (ไปที่ ตั้งค่า)');
   const part = await filePart(file);
   const data = await generate(key, model, {
-    contents: [{ role: 'user', parts: [{ text: prompt(categories, today) }, part] }],
+    contents: [{ role: 'user', parts: [{ text: prompt(categories, today, ownerNames) }, part] }],
     generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
   });
   const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
   let out;
   try { out = JSON.parse(text); } catch { throw new Error('อ่านผลลัพธ์จาก Gemini ไม่ได้'); }
+  return normalize(out, { categories, today, ownerNames });
+}
+
+// Turn Gemini's answer into app transactions; double-checks own-account transfers and splits fees.
+export function normalize(out, { categories, today, ownerNames = [] }) {
   const ids = new Set(categories.map(c => c.id));
-  return (out.transactions || [])
-    .filter(t => t && Number(t.amount) > 0)
-    .map(t => ({
+  const statement = out.kind === 'statement';
+  const res = [];
+  for (const t of out.transactions || []) {
+    if (!t || !(Number(t.amount) > 0)) continue;
+    let type = ['income', 'expense', 'transfer'].includes(t.type) ? t.type : 'expense';
+    const fromMe = t.from_name && (isOwner(t.from_name, ownerNames) || (t.to_name && samePerson(t.from_name, t.to_name)));
+    const toMe = t.to_name && (isOwner(t.to_name, ownerNames) || (t.from_name && samePerson(t.from_name, t.to_name)));
+    if (!statement && fromMe && toMe) type = 'transfer';
+    else if (!statement && type === 'transfer' && t.from_name && t.to_name && !samePerson(t.from_name, t.to_name) && ownerNames.length
+      && !(isOwner(t.from_name, ownerNames) && isOwner(t.to_name, ownerNames)) && !/บัตรเครดิต|credit/i.test(t.note || '')) {
+      type = isOwner(t.to_name, ownerNames) ? 'income' : 'expense'; // model said transfer but names say otherwise
+    }
+    const route = (t.from_account || t.to_account) ? `${acct(t.from_bank, t.from_account)} → ${acct(t.to_bank, t.to_account)}` : '';
+    const note = [t.note, t.bill_ref && `เลขที่ ${t.bill_ref}`, type === 'transfer' && route].filter(Boolean).join(' · ');
+    const base = {
       date: /^\d{4}-\d{2}-\d{2}$/.test(t.date) ? t.date : today,
       time: t.time || '',
-      amount: Math.round(Number(t.amount) * 100) / 100,
-      type: t.type === 'income' ? 'income' : 'expense',
-      cat: ids.has(t.category) ? t.category : (t.type === 'income' ? 'inc_other' : 'exp_other'),
-      merchant: t.merchant || '',
-      note: t.note || '',
+      method: t.method || (statement ? 'card' : 'transfer'),
+      source: statement ? 'statement' : 'slip',
       ref: t.ref || '',
-      method: t.method || (out.kind === 'statement' ? 'card' : 'transfer'),
-      source: out.kind === 'statement' ? 'statement' : 'slip',
-    }));
+    };
+    res.push({
+      ...base,
+      amount: Math.round(Number(t.amount) * 100) / 100,
+      type,
+      cat: type === 'transfer' ? 'transfer' : ids.has(t.category) ? t.category : (type === 'income' ? 'inc_other' : 'exp_other'),
+      merchant: type === 'transfer' ? (t.to_name || t.merchant || '') : (type === 'income' ? (t.from_name || t.merchant || '') : (t.merchant || t.to_name || '')),
+      note,
+    });
+    const fee = Math.round((Number(t.fee) || 0) * 100) / 100;
+    if (!statement && fee > 0) {
+      res.push({ ...base, amount: fee, type: 'expense', cat: ids.has('fee') ? 'fee' : 'exp_other', merchant: t.from_bank || 'ค่าธรรมเนียม',
+        note: 'ค่าธรรมเนียมการโอน', ref: base.ref ? base.ref + '-fee' : '' });
+    }
+  }
+  return res;
 }
 
 export async function testKey(key, model) {

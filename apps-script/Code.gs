@@ -113,6 +113,7 @@ function writeAll(req) {
   if (ss.getSpreadsheetTimeZone() !== 'Asia/Bangkok') ss.setSpreadsheetTimeZone('Asia/Bangkok');
   const catName = {};
   (req.categories || []).forEach(c => { catName[c.id] = (c.emoji ? c.emoji + ' ' : '') + c.name; });
+  catName.transfer = '🔄 ย้ายเงิน';
 
   const tx = (req.tx || []).filter(t => t && /^\d{4}-\d{2}-\d{2}$/.test(t.date))
     .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
@@ -121,11 +122,11 @@ function writeAll(req) {
   const HEAD = ['วันที่', 'เดือน', 'ประเภท', 'หมวด', 'จำนวนเงิน', 'ยอดสุทธิ', 'ช่องทาง', 'ผู้รับ/ร้าน', 'โน้ต', 'ที่มา', 'เลขอ้างอิง', 'เวลา', 'id'];
   const rows = tx.map(t => {
     const amt = Math.round((Number(t.amount) || 0) * 100) / 100;
-    const inc = t.type === 'income';
+    const inc = t.type === 'income', move = t.type === 'transfer';
     const p = t.date.split('-').map(Number);
     // noon, so the day can't shift across time zones
-    return [new Date(p[0], p[1] - 1, p[2], 12), t.date.slice(0, 7), inc ? 'รายรับ' : 'รายจ่าย', safe(catName[t.cat] || t.cat || 'ไม่ระบุ'),
-      amt, inc ? amt : -amt, METHOD[t.method] || safe(t.method), safe(t.merchant), safe(t.note),
+    return [new Date(p[0], p[1] - 1, p[2], 12), t.date.slice(0, 7), move ? 'ย้ายเงิน' : inc ? 'รายรับ' : 'รายจ่าย', safe(catName[t.cat] || t.cat || 'ไม่ระบุ'),
+      amt, move ? 0 : inc ? amt : -amt, METHOD[t.method] || safe(t.method), safe(t.merchant), safe(t.note),
       SOURCE[t.source] || safe(t.source), safe(t.ref), safe(t.time), safe(t.id)];
   });
   const sh = getSheet(SHEET_TX);
@@ -147,14 +148,14 @@ function writeAll(req) {
   const byMonth = {};
   tx.forEach(t => {
     const m = t.date.slice(0, 7);
-    const o = byMonth[m] || (byMonth[m] = { inc: 0, exp: 0, n: 0 });
+    const o = byMonth[m] || (byMonth[m] = { inc: 0, exp: 0, move: 0, n: 0 });
     const a = Number(t.amount) || 0;
-    if (t.type === 'income') o.inc += a; else o.exp += a;
+    if (t.type === 'income') o.inc += a; else if (t.type === 'transfer') o.move += a; else o.exp += a;
     o.n++;
   });
   const months = Object.keys(byMonth).sort().reverse();
-  const MHEAD = ['เดือน', 'รายรับ', 'รายจ่าย', 'คงเหลือ', 'จำนวนรายการ'];
-  const mrows = months.map(m => [m, byMonth[m].inc, byMonth[m].exp, byMonth[m].inc - byMonth[m].exp, byMonth[m].n]);
+  const MHEAD = ['เดือน', 'รายรับ', 'รายจ่าย', 'คงเหลือ', 'จำนวนรายการ', 'ย้ายเงิน (ไม่นับ)'];
+  const mrows = months.map(m => [m, byMonth[m].inc, byMonth[m].exp, byMonth[m].inc - byMonth[m].exp, byMonth[m].n, byMonth[m].move]);
   const ms = getSheet(SHEET_MONTH);
   ms.clear();
   ensureSize(ms, mrows.length + 1, MHEAD.length);
@@ -163,6 +164,7 @@ function writeAll(req) {
   if (mrows.length) {
     ms.getRange(2, 1, mrows.length, MHEAD.length).setValues(mrows);
     ms.getRange(2, 2, mrows.length, 2).setNumberFormat('#,##0.00');
+    ms.getRange(2, 6, mrows.length, 1).setNumberFormat('#,##0.00');
     ms.getRange(2, 4, mrows.length, 1).setNumberFormat('[Color10]#,##0.00;[Red]-#,##0.00;0.00');
   }
   styleHeader(ms, MHEAD.length);
@@ -170,7 +172,7 @@ function writeAll(req) {
   // ---- แยกหมวด (รายจ่าย 12 เดือนล่าสุด) ----
   const last12 = months.slice(0, 12);
   const byCat = {};
-  tx.filter(t => t.type !== 'income' && last12.indexOf(t.date.slice(0, 7)) >= 0).forEach(t => {
+  tx.filter(t => t.type === 'expense' && last12.indexOf(t.date.slice(0, 7)) >= 0).forEach(t => {
     const c = catName[t.cat] || t.cat || 'ไม่ระบุ';
     const o = byCat[c] || (byCat[c] = { total: 0 });
     const m = t.date.slice(0, 7);

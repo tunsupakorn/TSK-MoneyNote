@@ -14,7 +14,11 @@ export const DEFAULT_CATEGORIES = [
   { id: 'drink', name: 'เครื่องดื่ม/กาแฟ', emoji: '🧋', type: 'expense' },
   { id: 'transport', name: 'เดินทาง', emoji: '🚕', type: 'expense' },
   { id: 'shopping', name: 'ช้อปปิ้ง', emoji: '🛍️', type: 'expense' },
-  { id: 'bills', name: 'บิล/ค่าน้ำไฟ', emoji: '💡', type: 'expense' },
+  { id: 'electric', name: 'ค่าไฟ', emoji: '⚡', type: 'expense' },
+  { id: 'water', name: 'ค่าน้ำ', emoji: '🚰', type: 'expense' },
+  { id: 'internet', name: 'อินเทอร์เน็ต', emoji: '🌐', type: 'expense' },
+  { id: 'phone', name: 'ค่าโทรศัพท์', emoji: '📱', type: 'expense' },
+  { id: 'bills', name: 'บิลอื่นๆ', emoji: '🧾', type: 'expense' },
   { id: 'home', name: 'ที่พัก', emoji: '🏠', type: 'expense' },
   { id: 'health', name: 'สุขภาพ', emoji: '💊', type: 'expense' },
   { id: 'fun', name: 'บันเทิง', emoji: '🎬', type: 'expense' },
@@ -31,7 +35,23 @@ export const DEFAULT_CATEGORIES = [
   { id: 'inc_other', name: 'อื่นๆ', emoji: '💰', type: 'income' },
 ];
 
-const defaultSettings = () => ({ categories: DEFAULT_CATEGORIES, budget: 0 });
+const CAT_VERSION = 2;
+const defaultSettings = () => ({ categories: DEFAULT_CATEGORIES, budget: 0, catVersion: CAT_VERSION, ownerNames: '' });
+
+// Bring a saved category list up to date (v2 adds bill categories); returns true if it changed.
+function migrateSettings(s) {
+  if ((s.catVersion || 1) >= CAT_VERSION) return false;
+  const list = [...(s.categories || DEFAULT_CATEGORIES)];
+  const has = id => list.some(c => c.id === id);
+  const bills = list.findIndex(c => c.id === 'bills');
+  const add = ['electric', 'water', 'internet', 'phone'].filter(id => !has(id)).map(id => DEFAULT_CATEGORIES.find(c => c.id === id));
+  list.splice(bills >= 0 ? bills : list.length, 0, ...add);
+  const b = list.find(c => c.id === 'bills');
+  if (b && b.name === 'บิล/ค่าน้ำไฟ') Object.assign(b, { name: 'บิลอื่นๆ', emoji: '🧾' });
+  s.categories = list;
+  s.catVersion = CAT_VERSION;
+  return true;
+}
 
 export const state = {
   mode: 'local',            // 'local' | 'cloud'
@@ -70,7 +90,9 @@ export function setFirebaseConfig(cfg) { cfg ? LS.set('jj_fbconfig', cfg) : LS.d
 
 function loadLocal() {
   state.tx = LS.get('jj_tx', []);
-  state.settings = { ...defaultSettings(), ...LS.get('jj_settings', {}) };
+  const saved = LS.get('jj_settings', {});
+  state.settings = { ...defaultSettings(), catVersion: saved.categories ? 1 : CAT_VERSION, ...saved };
+  if (migrateSettings(state.settings)) LS.set('jj_settings', state.settings);
 }
 
 export async function initStore() {
@@ -113,7 +135,9 @@ function attachUser(user) {
   }, err => { state.syncStatus = 'error'; state.syncError = err.message; emit(); }));
   unsubs.push(F.onSnapshot(F.doc(db, 'users', user.uid), snap => {
     const s = snap.exists() ? snap.data().settings : null;
-    state.settings = { ...defaultSettings(), ...(s || {}) };
+    state.settings = { ...defaultSettings(), catVersion: s?.categories ? 1 : CAT_VERSION, ...(s || {}) };
+    if (s && migrateSettings(state.settings) && !snap.metadata.fromCache)
+      F.setDoc(F.doc(db, 'users', user.uid), { settings: clean(state.settings) }, { merge: true }).catch(syncFail);
     emit();
   }, err => console.warn(err)));
 }

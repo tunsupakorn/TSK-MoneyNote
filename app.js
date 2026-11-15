@@ -28,7 +28,13 @@ const ui = {
 };
 
 const cats = () => state.settings.categories || S.DEFAULT_CATEGORIES;
-const catById = id => cats().find(c => c.id === id) || { id, name: 'ไม่ระบุ', emoji: '❔', type: 'expense' };
+const TRANSFER_CAT = { id: 'transfer', name: 'ย้ายเงิน', emoji: '🔄', type: 'transfer' };
+const catById = id => id === 'transfer' ? TRANSFER_CAT : cats().find(c => c.id === id) || { id, name: 'ไม่ระบุ', emoji: '❔', type: 'expense' };
+const SIGN = { expense: '−', income: '+', transfer: '↔ ' };
+const EMOJIS = ['🍜', '🍱', '🧋', '☕', '🍺', '🛒', '🛍️', '👕', '💄', '🚕', '🚗', '⛽', '🏍️', '🚇', '✈️', '🏠', '⚡', '🚰', '🌐', '📱', '🧾', '💊', '🏥', '🐶', '👶', '🎮', '🎬', '🎵', '📚', '🎓', '🏋️', '💇', '🎁', '❤️', '🙏', '💼', '🏪', '📈', '💰', '🔁', '🏦', '💳', '🧴', '🧹', '🔧', '📦'];
+// owner names for spotting transfers between your own accounts: what you typed + your account name
+const ownerNames = () => [...String(state.settings.ownerNames || '').split(/[,\n]/), state.user?.name || '']
+  .map(s => s.trim()).filter(s => s.length > 1);
 const monthTx = () => state.tx.filter(t => t.date?.startsWith(ui.month));
 const sum = (list, type) => list.filter(t => t.type === type).reduce((s, t) => s + Number(t.amount || 0), 0);
 
@@ -69,7 +75,7 @@ function txRow(t) {
   return `<li><button class="tx" data-action="edit" data-id="${esc(t.id)}">
     <span class="bubble" aria-hidden="true">${c.emoji}</span>
     <span class="tx-main"><b>${esc(c.name)}</b><small>${esc(sub || METHODS[t.method] || '')}</small></span>
-    <span class="tx-amt num ${t.type}">${t.type === 'expense' ? '−' : '+'}${baht(t.amount)}</span>
+    <span class="tx-amt num ${t.type}">${SIGN[t.type] || ''}${baht(t.amount)}</span>
   </button></li>`;
 }
 
@@ -220,14 +226,16 @@ function viewScan() {
 }
 
 function reviewRow(it, i) {
-  const options = cats().filter(c => c.type === it.type).map(c => `<option value="${c.id}" ${c.id === it.cat ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('');
+  const options = it.type === 'transfer' ? `<option value="transfer">🔄 ย้ายเงิน (ไม่นับรายรับ/รายจ่าย)</option>`
+    : cats().filter(c => c.type === it.type).map(c => `<option value="${c.id}" ${c.id === it.cat ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('');
   return `<li class="rv ${it.keep ? '' : 'off'}">
     <label class="rv-check"><input type="checkbox" data-rv="keep" data-i="${i}" ${it.keep ? 'checked' : ''} aria-label="เลือกรายการ"></label>
     <div class="rv-body">
       <div class="row between"><b>${esc(it.merchant || it.fileName)}</b>
         ${it.dup ? '<span class="tag warn">ซ้ำ</span>' : it.old ? '<span class="tag">เกิน 30 วัน</span>' : ''}</div>
       <div class="rv-grid">
-        <select data-rv="type" data-i="${i}" aria-label="ประเภท"><option value="expense" ${it.type === 'expense' ? 'selected' : ''}>รายจ่าย</option><option value="income" ${it.type === 'income' ? 'selected' : ''}>รายรับ</option></select>
+        <select data-rv="type" data-i="${i}" aria-label="ประเภท">${[['expense', 'รายจ่าย'], ['income', 'รายรับ'], ['transfer', 'ย้ายเงิน']]
+          .map(([v, l]) => `<option value="${v}" ${it.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <input type="number" inputmode="decimal" step="0.01" value="${it.amount}" data-rv="amount" data-i="${i}" aria-label="จำนวนเงิน">
         <select data-rv="cat" data-i="${i}" aria-label="หมวด">${options}</select>
         <input type="date" value="${it.date}" data-rv="date" data-i="${i}" aria-label="วันที่">
@@ -239,8 +247,8 @@ function reviewRow(it, i) {
 function viewSettings() {
   const cfg = S.getFirebaseConfig();
   const expCats = cats().filter(c => c.type === 'expense'), incCats = cats().filter(c => c.type === 'income');
-  const catChips = list => list.map(c => `<span class="chip">${c.emoji} ${esc(c.name)}
-    ${S.DEFAULT_CATEGORIES.some(d => d.id === c.id) ? '' : `<button class="x" data-action="cat-del" data-id="${c.id}" aria-label="ลบหมวด ${esc(c.name)}">×</button>`}</span>`).join('');
+  const catChips = list => list.map(c => `<button class="chip edit" data-action="cat-edit" data-id="${c.id}" aria-label="แก้ไขหมวด ${esc(c.name)}">${c.emoji} ${esc(c.name)} <i aria-hidden="true">✎</i></button>`).join('');
+  const missingDefaults = S.DEFAULT_CATEGORIES.filter(d => !cats().some(c => c.id === d.id)).length;
 
   let account;
   if (!cfg) {
@@ -275,6 +283,9 @@ function viewSettings() {
       <input type="password" placeholder="วาง API key ที่นี่" value="${esc(prefs.geminiKey)}" data-input="gkey" autocomplete="off">
       <label class="lbl">โมเดล<input type="text" value="${esc(prefs.geminiModel)}" data-input="gmodel"></label>
       <button class="btn ghost sm" data-action="gtest">ทดสอบ key</button>
+      <label class="lbl">ชื่อ-นามสกุลของคุณ ตามบัญชีธนาคาร (ใช้แยก "ย้ายเงิน" ระหว่างบัญชีตัวเอง)
+        <input type="text" placeholder="เช่น ศุภกร นิตยวรรณ, Supakorn Nittayawan" value="${esc(state.settings.ownerNames || '')}" data-input="owner"></label>
+      <button class="btn ghost sm" data-action="owner-save">บันทึกชื่อ</button>
     </section>
 
     ${sheetCard()}
@@ -285,15 +296,13 @@ function viewSettings() {
       <small class="muted">ใส่ 0 เพื่อปิดการแสดงงบ</small>
     </section>
 
-    <section class="card"><h3>🗂️ หมวดหมู่</h3>
-      <small class="muted">รายจ่าย</small><div class="chips">${catChips(expCats)}</div>
-      <small class="muted">รายรับ</small><div class="chips">${catChips(incCats)}</div>
-      <form class="row gap wrap" data-form="cat">
-        <input name="emoji" placeholder="😀" maxlength="4" class="w-emoji" aria-label="อีโมจิ">
-        <input name="name" placeholder="ชื่อหมวดใหม่" required class="grow" aria-label="ชื่อหมวด">
-        <select name="type" aria-label="ประเภท"><option value="expense">รายจ่าย</option><option value="income">รายรับ</option></select>
-        <button class="btn primary sm">เพิ่ม</button>
-      </form>
+    <section class="card" id="cats"><h3>🗂️ หมวดหมู่</h3>
+      <p class="muted small">แตะหมวดเพื่อเปลี่ยนชื่อ อีโมจิ ลำดับ หรือลบ</p>
+      <div class="row between"><small class="muted">รายจ่าย (${expCats.length})</small><button class="link small" data-action="cat-new" data-t="expense">+ เพิ่มหมวดรายจ่าย</button></div>
+      <div class="chips">${catChips(expCats)}</div>
+      <div class="row between"><small class="muted">รายรับ (${incCats.length})</small><button class="link small" data-action="cat-new" data-t="income">+ เพิ่มหมวดรายรับ</button></div>
+      <div class="chips">${catChips(incCats)}</div>
+      ${missingDefaults ? `<button class="link small" data-action="cat-restore">↺ คืนหมวดเริ่มต้นที่ลบไป (${missingDefaults})</button>` : ''}
     </section>
 
     <section class="card"><h3>🎨 ธีม</h3>
@@ -350,6 +359,62 @@ function sheetCard() {
   </section>`;
 }
 
+// ---------- category editor ----------
+let catDraft = null;
+function openCatEditor(id, type) {
+  const c = id && cats().find(x => x.id === id);
+  catDraft = c ? { ...c, isNew: false } : { id: 'c_' + S.newId(), name: '', emoji: type === 'income' ? '💰' : '🏷️', type, isNew: true };
+  renderCatEditor();
+  if (!$('#sheet').open) $('#sheet').showModal();
+}
+function renderCatEditor() {
+  const d = catDraft;
+  const same = cats().filter(c => c.type === d.type);
+  const pos = same.findIndex(c => c.id === d.id);
+  const used = state.tx.filter(t => t.cat === d.id).length;
+  $('#sheet').innerHTML = `<form method="dialog" class="sheet-body" data-form="cat-edit">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="row between"><h2>${d.isNew ? 'เพิ่มหมวด' : 'แก้ไขหมวด'}${d.type === 'income' ? 'รายรับ' : 'รายจ่าย'}</h2>
+      <button type="button" class="icon-btn" data-action="close-sheet" aria-label="ปิด">✕</button></div>
+    <div class="row gap">
+      <input class="w-emoji ce-emoji" value="${esc(d.emoji)}" data-ce="emoji" maxlength="8" aria-label="อีโมจิ">
+      <input class="grow" value="${esc(d.name)}" data-ce="name" placeholder="ชื่อหมวด เช่น ค่าเทอมลูก" required maxlength="30" aria-label="ชื่อหมวด">
+    </div>
+    <div class="emoji-grid" role="group" aria-label="เลือกอีโมจิ">${EMOJIS.map(e => `<button type="button" class="${e === d.emoji ? 'on' : ''}" data-action="ce-emoji" data-e="${e}">${e}</button>`).join('')}</div>
+    ${d.isNew ? '' : `<div class="row between">
+      <small class="muted">ลำดับ ${pos + 1} จาก ${same.length}${used ? ` · ใช้อยู่ ${used} รายการ` : ''}</small>
+      <div class="row gap"><button type="button" class="btn ghost sm" data-action="ce-move" data-d="-1" ${pos <= 0 ? 'disabled' : ''}>‹ เลื่อนก่อน</button>
+      <button type="button" class="btn ghost sm" data-action="ce-move" data-d="1" ${pos >= same.length - 1 ? 'disabled' : ''}>เลื่อนหลัง ›</button></div></div>`}
+    <div class="row gap">
+      ${d.isNew ? '' : `<button type="button" class="btn danger" data-action="ce-delete">ลบหมวด</button>`}
+      <button type="submit" class="btn primary big grow">${d.isNew ? 'เพิ่มหมวด' : 'บันทึก'}</button>
+    </div>
+  </form>`;
+}
+function deleteCategory(id) {
+  const c = cats().find(x => x.id === id);
+  const same = cats().filter(x => x.type === c.type && x.id !== id);
+  if (!same.length) return toast('ต้องมีอย่างน้อย 1 หมวด');
+  const other = same.find(x => x.id === (c.type === 'income' ? 'inc_other' : 'exp_other')) || same[same.length - 1];
+  const used = state.tx.filter(t => t.cat === id);
+  const msg = used.length ? `ลบหมวด "${c.name}"? รายการ ${used.length} รายการในหมวดนี้จะย้ายไปหมวด "${other.name}"` : `ลบหมวด "${c.name}"?`;
+  if (!confirm(msg)) return;
+  if (used.length) S.saveMany(used.map(t => ({ ...t, cat: other.id })));
+  S.saveSettings({ categories: cats().filter(x => x.id !== id) });
+  $('#sheet').close();
+  toast('ลบหมวดแล้ว');
+}
+function moveCategory(id, dir) {
+  const list = [...cats()];
+  const i = list.findIndex(c => c.id === id);
+  let j = i + dir;
+  while (j >= 0 && j < list.length && list[j].type !== list[i].type) j += dir;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  S.saveSettings({ categories: list });
+  renderCatEditor();
+}
+
 // ---------- add / edit sheet ----------
 let draft = null;
 function openSheet(tx) {
@@ -360,18 +425,22 @@ function openSheet(tx) {
 }
 function renderSheet() {
   const d = draft;
-  const list = cats().filter(c => c.type === d.type);
-  if (!list.some(c => c.id === d.cat)) d.cat = list[0]?.id;
+  const list = d.type === 'transfer' ? [] : cats().filter(c => c.type === d.type);
+  if (d.type === 'transfer') d.cat = 'transfer';
+  else if (!list.some(c => c.id === d.cat)) d.cat = list[0]?.id;
   $('#sheet').innerHTML = `<form method="dialog" class="sheet-body" data-form="tx">
     <div class="grab" aria-hidden="true"></div>
     <div class="row between"><h2>${d.id ? 'แก้ไขรายการ' : 'จดรายการใหม่'}</h2><button type="button" class="icon-btn" data-action="close-sheet" aria-label="ปิด">✕</button></div>
     <div class="seg ${d.type}">
       <button type="button" aria-selected="${d.type === 'expense'}" data-action="d-type" data-t="expense">รายจ่าย</button>
       <button type="button" aria-selected="${d.type === 'income'}" data-action="d-type" data-t="income">รายรับ</button>
+      <button type="button" aria-selected="${d.type === 'transfer'}" data-action="d-type" data-t="transfer">ย้ายเงิน</button>
     </div>
     <label class="amount ${d.type}"><span>฿</span><input type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${d.amount}" data-d="amount" required aria-label="จำนวนเงิน"></label>
-    <div class="cat-grid">${list.map(c => `<button type="button" class="cat ${c.id === d.cat ? 'on' : ''}" data-action="d-cat" data-id="${c.id}">
-      <span>${c.emoji}</span><small>${esc(c.name)}</small></button>`).join('')}</div>
+    ${d.type === 'transfer'
+      ? `<p class="g-note">🔄 โอนระหว่างบัญชีของคุณเอง หรือชำระบัตรเครดิต · <b>ไม่นับ</b>เป็นรายรับหรือรายจ่าย</p>`
+      : `<div class="cat-grid">${list.map(c => `<button type="button" class="cat ${c.id === d.cat ? 'on' : ''}" data-action="d-cat" data-id="${c.id}">
+      <span>${c.emoji}</span><small>${esc(c.name)}</small></button>`).join('')}</div>`}
     <div class="row gap">
       <label class="lbl grow">วันที่<input type="date" value="${d.date}" data-d="date" required></label>
       <label class="lbl grow">ช่องทาง<select data-d="method">${Object.entries(METHODS).map(([k, l]) => `<option value="${k}" ${d.method === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -401,7 +470,7 @@ async function runScan(files) {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
   const cutISO = new Date(cutoff - cutoff.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const queue = [...files];
-  const opts = { key: prefs.geminiKey, model: prefs.geminiModel, categories: cats(), today: todayISO() };
+  const opts = { key: prefs.geminiKey, model: prefs.geminiModel, categories: cats(), today: todayISO(), ownerNames: ownerNames() };
   const worker = async () => {
     while (queue.length) {
       const f = queue.shift();
@@ -536,11 +605,18 @@ document.addEventListener('click', async e => {
       if (confirm('ยกเลิกการเชื่อม Google Sheet? (ข้อมูลในชีตเดิมยังอยู่ แต่จะไม่อัปเดตอีก)')) { Sheet.disconnect(); toast('ยกเลิกการเชื่อมแล้ว'); }
       return;
     case 'budget-save': S.saveSettings({ budget: Math.max(0, Number($('[data-input="budget"]').value) || 0) }); return toast('บันทึกงบแล้ว');
-    case 'cat-del': {
-      const id = el.dataset.id;
-      if (state.tx.some(t => t.cat === id) && !confirm('หมวดนี้มีรายการอยู่ ลบหมวดได้แต่รายการจะแสดงเป็น "ไม่ระบุ" ต่อไหม?')) return;
-      return S.saveSettings({ categories: cats().filter(c => c.id !== id) });
+    case 'cat-edit': return openCatEditor(el.dataset.id);
+    case 'cat-new': return openCatEditor(null, el.dataset.t);
+    case 'ce-emoji': catDraft.emoji = el.dataset.e; return renderCatEditor();
+    case 'ce-move': return moveCategory(catDraft.id, Number(el.dataset.d));
+    case 'ce-delete': return deleteCategory(catDraft.id);
+    case 'cat-restore': {
+      const list = [...cats()];
+      S.DEFAULT_CATEGORIES.forEach(d => { if (!list.some(c => c.id === d.id)) list.push({ ...d }); });
+      S.saveSettings({ categories: list });
+      return toast('คืนหมวดเริ่มต้นแล้ว');
     }
+    case 'owner-save': S.saveSettings({ ownerNames: $('[data-input="owner"]').value.trim() }); return toast('บันทึกชื่อแล้ว');
     case 'theme': S.savePrefs({ theme: el.dataset.t }); applyTheme(); return render();
     case 'export-json':
       return download(`jukjik-backup-${todayISO()}.json`, JSON.stringify({ app: 'jukjik', version: 1, tx: state.tx, settings: state.settings }, null, 2), 'application/json');
@@ -573,24 +649,29 @@ document.addEventListener('submit', async e => {
       toast('เข้าสู่ระบบแล้ว');
     } catch (err) { ui.authError = err.message; }
     ui.authBusy = false; render();
-  } else if (f === 'cat') {
-    const fd = new FormData(e.target);
-    const name = String(fd.get('name')).trim();
-    if (!name) return;
-    S.saveSettings({ categories: [...cats(), { id: 'c_' + S.newId(), name, emoji: String(fd.get('emoji')).trim() || '🏷️', type: fd.get('type') }] });
-    toast('เพิ่มหมวดแล้ว');
+  } else if (f === 'cat-edit') {
+    const d = catDraft;
+    d.name = d.name.trim();
+    if (!d.name) return toast('ใส่ชื่อหมวดก่อน');
+    if (cats().some(c => c.id !== d.id && c.type === d.type && c.name === d.name)) return toast('มีหมวดชื่อนี้แล้ว');
+    const item = { id: d.id, name: d.name, emoji: d.emoji.trim() || '🏷️', type: d.type };
+    const list = d.isNew ? [...cats(), item] : cats().map(c => c.id === d.id ? item : c);
+    S.saveSettings({ categories: list });
+    $('#sheet').close();
+    toast(d.isNew ? 'เพิ่มหมวดแล้ว' : 'บันทึกหมวดแล้ว');
   }
 });
 
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.d) { draft[t.dataset.d] = t.value; return; }
+  if (t.dataset.ce) { catDraft[t.dataset.ce] = t.value; return; }
   if (t.dataset.rv) {
     const it = ui.scan.items[+t.dataset.i];
     const k = t.dataset.rv;
     if (k === 'keep') { it.keep = t.checked; render(); }
     else if (k === 'amount') it.amount = Number(t.value);
-    else if (k === 'type') { it.type = t.value; it.cat = it.type === 'income' ? 'inc_other' : 'exp_other'; render(); }
+    else if (k === 'type') { it.type = t.value; it.cat = it.type === 'transfer' ? 'transfer' : it.type === 'income' ? 'inc_other' : 'exp_other'; render(); }
     else it[k] = t.value;
     return;
   }
