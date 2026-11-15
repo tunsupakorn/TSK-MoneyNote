@@ -89,6 +89,7 @@ Firebase ยังเป็นที่เก็บหลัก ส่วน Goo
 | `gemini.js` | ส่งสลิป/PDF ให้ Gemini อ่าน |
 | `charts.js` | กราฟรายวันและแยกหมวด |
 | `sheets.js` | ส่งสำเนาข้อมูลลง Google Sheet |
+| `qr.js` | อ่าน QR บนสลิปในเครื่อง (เลขอ้างอิงธนาคาร กันสลิปซ้ำ) |
 | `apps-script/` | สคริปต์ฝั่ง Google Sheet (Apps Script) |
 | `firebase-config.js` | ค่า Firebase ของคุณ |
 | `firestore.rules` | กฎความปลอดภัยฐานข้อมูล |

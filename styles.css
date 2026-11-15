@@ -185,6 +185,7 @@ body.no-nav .tabbar { display: none; }
 .rv-grid input, .rv-grid select { padding: 8px; font-size: .9rem; }
 .tag { font-size: .72rem; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
 .tag.warn { background: var(--orange); color: #fff; }
+.tag.ok { background: var(--income); color: #fff; }
 .sticky { position: sticky; bottom: calc(86px + env(safe-area-inset-bottom)); margin-top: 12px; }
 .tips ul { margin: 0; padding-left: 18px; color: var(--text-2); font-size: .9rem; }
 .tips li + li { margin-top: 6px; }

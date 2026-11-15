@@ -2,6 +2,7 @@ import * as S from './store.js';
 import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler, setFallbackHandler, setStatusHandler, cancelAll, resetCancel } from './gemini.js';
 import { categoryBars, dailyColumns, bindColumnTips } from './charts.js';
 import * as Sheet from './sheets.js';
+import { readSlipQR } from './qr.js';
 
 const { state, prefs } = S;
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -20,7 +21,7 @@ const ui = {
   month: todayISO().slice(0, 7),
   statsType: 'expense',
   search: '',
-  scan: { busy: false, done: 0, total: 0, items: [], errors: [], only30: true },
+  scan: { busy: false, done: 0, total: 0, items: [], errors: [], skipped: [], only30: true },
   authMode: 'signin',
   authBusy: false,
   authError: '',
@@ -210,6 +211,7 @@ function viewScan() {
       <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div>
       <small class="muted" id="scan-note">${esc(scanNote())}</small>
       <button class="btn ghost sm" data-action="scan-cancel" ${sc.cancel ? 'disabled' : ''}>${sc.cancel ? 'กำลังยกเลิก…' : 'ยกเลิก'}</button></section>` : ''}
+    ${sc.skipped.length ? `<section class="card notice"><p>⏭️ ข้าม <b>${sc.skipped.length}</b> สลิปที่เคยบันทึกแล้ว (ตรวจจาก QR บนสลิป ไม่ใช้โควตา Gemini)</p></section>` : ''}
     ${sc.errors.length ? `<section class="card error"><b>อ่านไม่สำเร็จ ${sc.errors.length} ไฟล์</b><ul>${sc.errors.map(e => `<li>${esc(e.name)}: ${esc(e.msg)}</li>`).join('')}</ul>
       ${!sc.busy && sc.errors.some(e => e.file) ? `<button class="btn primary sm" data-action="scan-retry">🔄 ลองอ่านไฟล์เหล่านี้อีกครั้ง</button>` : ''}</section>` : ''}
     ${sc.items.length ? `<section class="review">
@@ -232,7 +234,8 @@ function reviewRow(it, i) {
     <label class="rv-check"><input type="checkbox" data-rv="keep" data-i="${i}" ${it.keep ? 'checked' : ''} aria-label="เลือกรายการ"></label>
     <div class="rv-body">
       <div class="row between"><b>${esc(it.merchant || it.fileName)}</b>
-        ${it.dup ? '<span class="tag warn">ซ้ำ</span>' : it.old ? '<span class="tag">เกิน 30 วัน</span>' : ''}</div>
+<span class="row gap">${it.qrRef ? '<span class="tag ok" title="เลขอ้างอิงยืนยันจาก QR บนสลิป">✓ QR</span>' : ''}
+        ${it.dup ? '<span class="tag warn">ซ้ำ</span>' : it.old ? '<span class="tag">เกิน 30 วัน</span>' : ''}</span></div>
       <div class="rv-grid">
         <select data-rv="type" data-i="${i}" aria-label="ประเภท">${[['expense', 'รายจ่าย'], ['income', 'รายรับ'], ['transfer', 'ย้ายเงิน']]
           .map(([v, l]) => `<option value="${v}" ${it.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
@@ -456,14 +459,14 @@ function renderSheet() {
 
 // ---------- scan ----------
 function isDup(it, existing) {
-  return existing.some(t => (it.ref && t.ref && t.ref === it.ref) ||
+  return existing.some(t => (it.qrRef && t.qrRef === it.qrRef) || (it.ref && t.ref && t.ref === it.ref) ||
     (t.date === it.date && Number(t.amount) === Number(it.amount) && t.type === it.type && (t.merchant || '') === (it.merchant || '') && (t.time || '') === (it.time || '')));
 }
 const scanNote = () => `${ui.scan.note || 'ปกติใช้เวลา 5–20 วินาทีต่อใบ'} · ${Math.round((Date.now() - (ui.scan.started || Date.now())) / 1000)} วินาที`;
 
 async function runScan(files) {
   const sc = ui.scan;
-  Object.assign(sc, { busy: true, done: 0, total: files.length, errors: [], note: '', cancel: false, started: Date.now() });
+  Object.assign(sc, { busy: true, done: 0, total: files.length, errors: [], skipped: [], note: '', cancel: false, started: Date.now() });
   resetCancel();
   render();
   const ticker = setInterval(() => { const el = $('#scan-note'); if (el) el.textContent = scanNote(); }, 1000);
@@ -471,14 +474,22 @@ async function runScan(files) {
   const cutISO = new Date(cutoff - cutoff.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const queue = [...files];
   const opts = { key: prefs.geminiKey, model: prefs.geminiModel, categories: cats(), today: todayISO(), ownerNames: ownerNames() };
+  const seenQR = new Set(sc.items.map(i => i.qrRef).filter(Boolean));
   const worker = async () => {
     while (queue.length) {
       const f = queue.shift();
       if (sc.cancel) { sc.errors.push({ name: f.name, msg: 'ยกเลิกแล้ว', file: f }); sc.done++; continue; }
       sc.note = '';
       try {
+        // free on-device QR check first: a slip already saved is skipped without calling Gemini
+        const qr = await readSlipQR(f);
+        if (qr && (seenQR.has(qr.key) || state.tx.some(t => t.qrRef === qr.key))) {
+          sc.skipped.push(f.name); sc.done++; render(); continue;
+        }
+        if (qr) seenQR.add(qr.key);
         const found = await readFile(f, opts);
         if (!found.length) sc.errors.push({ name: f.name, msg: 'ไม่พบรายการเงินในไฟล์นี้', file: f });
+        if (qr && found[0]) Object.assign(found[0], { qrRef: qr.key, ref: found[0].ref || qr.ref });
         found.forEach(t => {
           const it = { ...t, fileName: f.name };
           it.dup = isDup(it, state.tx) || isDup(it, sc.items);
@@ -552,7 +563,7 @@ document.addEventListener('click', async e => {
     case 'ob-sync': S.savePrefs({ onboarded: true }); return go('settings');
     case 'show-ob': ui.obStep = 0; S.savePrefs({ onboarded: false }); window.scrollTo(0, 0); return render();
     case 'goto-gemini': go('settings'); return $('#gemini')?.scrollIntoView({ behavior: 'smooth' });
-    case 'scan-clear': Object.assign(ui.scan, { items: [], errors: [] }); return render();
+    case 'scan-clear': Object.assign(ui.scan, { items: [], errors: [], skipped: [] }); return render();
     case 'scan-cancel': ui.scan.cancel = true; cancelAll(); return render();
     case 'scan-retry': { const files = ui.scan.errors.map(e => e.file).filter(Boolean); if (files.length) runScan(files); return; }
     case 'scan-save': {
