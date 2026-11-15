@@ -1,5 +1,5 @@
 import * as S from './store.js';
-import { readFile, testKey } from './gemini.js';
+import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler } from './gemini.js';
 import { categoryBars, dailyColumns, bindColumnTips } from './charts.js';
 
 const { state, prefs } = S;
@@ -535,7 +535,7 @@ document.addEventListener('input', e => {
   switch (t.dataset.input) {
     case 'search': ui.search = t.value; return render();
     case 'gkey': return S.savePrefs({ geminiKey: t.value.trim() });
-    case 'gmodel': return S.savePrefs({ geminiModel: t.value.trim() || 'gemini-2.5-flash' });
+    case 'gmodel': return S.savePrefs({ geminiModel: t.value.trim() || DEFAULT_MODEL });
   }
 });
 
@@ -567,6 +567,11 @@ $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') e.targ
 
 // ---------- boot ----------
 applyTheme();
+setModelChangeHandler(m => {
+  S.savePrefs({ geminiModel: m });
+  const el = $('[data-input="gmodel"]'); if (el) el.value = m;
+  toast(`เปลี่ยนเป็นโมเดล ${m} ให้อัตโนมัติ`);
+});
 S.subscribe(() => render());
 render();
 S.initStore();

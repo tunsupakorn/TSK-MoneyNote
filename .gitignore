@@ -1,1 +1,4 @@
 .claude/
+firebase-debug.log
+*.log
+.firebase/

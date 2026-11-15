@@ -1,6 +1,10 @@
 // Reads bank slips (images) and credit-card statements (PDF) with the Gemini API.
 
-const ENDPOINT = m => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`;
+export const DEFAULT_MODEL = 'gemini-3.8-flash';
+let onModelChange = () => {};
+export function setModelChangeHandler(fn) { onModelChange = fn; }
+
+const ENDPOINT = m =>`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`;
 
 function blobToBase64(blob) {
   return new Promise((ok, bad) => {
@@ -77,26 +81,10 @@ Rules:
 export async function readFile(file, { key, model, categories, today }) {
   if (!key) throw new Error('ยังไม่ได้ใส่ Gemini API key (ไปที่ ตั้งค่า)');
   const part = await filePart(file);
-  let res;
-  try {
-    res = await fetch(ENDPOINT(model || 'gemini-2.5-flash'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt(categories, today) }, part] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
-      }),
-    });
-  } catch { throw new Error('เชื่อมต่อ Gemini ไม่ได้ ตรวจอินเทอร์เน็ต'); }
-  if (!res.ok) {
-    let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
-    if (res.status === 400 && /api key/i.test(msg)) throw new Error('API key ไม่ถูกต้อง');
-    if (res.status === 403) throw new Error('API key ไม่มีสิทธิ์ใช้งาน (403)');
-    if (res.status === 404) throw new Error(`ไม่พบโมเดล "${model}" ลองเปลี่ยนชื่อโมเดลในตั้งค่า`);
-    if (res.status === 429) throw new Error('ใช้เกินโควตาฟรีชั่วคราว รอสักครู่แล้วลองใหม่');
-    throw new Error(`Gemini ตอบกลับผิดพลาด (${res.status}) ${msg}`.trim());
-  }
-  const data = await res.json();
+  const data = await generate(key, model, {
+    contents: [{ role: 'user', parts: [{ text: prompt(categories, today) }, part] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0 },
+  });
   const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
   let out;
   try { out = JSON.parse(text); } catch { throw new Error('อ่านผลลัพธ์จาก Gemini ไม่ได้'); }
@@ -118,11 +106,33 @@ export async function readFile(file, { key, model, categories, today }) {
 }
 
 export async function testKey(key, model) {
-  const res = await fetch(ENDPOINT(model || 'gemini-2.5-flash'), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ contents: [{ parts: [{ text: 'ตอบคำว่า OK' }] }] }),
-  });
-  if (!res.ok) { let m = ''; try { m = (await res.json()).error?.message; } catch {} throw new Error(m || `HTTP ${res.status}`); }
+  await generate(key, model, { contents: [{ parts: [{ text: 'ตอบคำว่า OK' }] }] });
   return true;
+}
+
+// Calls Gemini. If Google has retired the model and its error names a replacement
+// ("...use models/gemini-x-flash..."), switch to that model once and remember it.
+async function generate(key, model, body, retried = false) {
+  model = model || DEFAULT_MODEL;
+  let res;
+  try {
+    res = await fetch(ENDPOINT(model), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify(body),
+    });
+  } catch { throw new Error('เชื่อมต่อ Gemini ไม่ได้ ตรวจอินเทอร์เน็ต'); }
+  if (res.ok) return res.json();
+  let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
+  const suggested = msg.match(/use\s+(?:models\/)?(gemini-[\w.-]*\w)/i)?.[1];
+  if (!retried && suggested && suggested !== model) {
+    onModelChange(suggested);
+    return generate(key, suggested, body, true);
+  }
+  if (res.status === 400 && /api key/i.test(msg)) throw new Error('API key ไม่ถูกต้อง');
+  if (res.status === 403) throw new Error('API key ไม่มีสิทธิ์ใช้งาน (403)');
+  if (res.status === 404 || /no longer available|not found/i.test(msg))
+    throw new Error(`โมเดล "${model}" ใช้ไม่ได้แล้ว ลองเปลี่ยนชื่อโมเดลในตั้งค่า (ดูรายชื่อใน aistudio.google.com)`);
+  if (res.status === 429) throw new Error('ใช้เกินโควตาฟรีชั่วคราว รอสักครู่แล้วลองใหม่');
+  throw new Error(`Gemini ตอบกลับผิดพลาด (${res.status}) ${msg}`.trim());
 }
