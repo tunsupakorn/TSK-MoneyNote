@@ -1,5 +1,6 @@
 // Data layer: works locally (localStorage) and switches to Firebase Firestore for multi-device sync.
-import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID } from './firebase-config.js';
+import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID, inviteOnly as INVITE_ONLY } from './firebase-config.js';
+export const inviteOnly = !!INVITE_ONLY;
 
 const FB_VERSION = '11.0.2';
 
@@ -145,7 +146,7 @@ function attachUser(user) {
   state.access = 'ok';
   state.localPendingCount = LS.get('jj_tx', []).length;
   // accounts made with email + password must confirm the address first (Google accounts are already verified)
-  if (!state.isOwner && !user.emailVerified) {
+  if (INVITE_ONLY && !state.isOwner && !user.emailVerified) {
     state.access = 'verify';
     state.syncStatus = 'signed-out';
     state.tx = [];
@@ -159,7 +160,7 @@ function attachUser(user) {
     state.syncStatus = snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'pending' : 'synced';
     emit();
   }, err => { if (!denied(err)) { state.syncStatus = 'error'; state.syncError = err.message; emit(); } }));
-  if (state.isOwner) {
+  if (INVITE_ONLY && state.isOwner) {
     unsubs.push(F.onSnapshot(F.collection(db, 'allow'), snap => {
       state.allowList = snap.docs.map(d => ({ email: d.id, ...d.data() })).sort((a, b) => a.email.localeCompare(b.email));
       emit();

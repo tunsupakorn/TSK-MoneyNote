@@ -109,6 +109,18 @@ export async function connect(webapp) {
   await syncNow(true);
 }
 
+// One-click connect from the Sheet's 🐣 menu: the sheet already holds this key, so no pairing call is needed.
+export async function connectWithKey(webapp, token) {
+  webapp = String(webapp || '').trim();
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(webapp)) throw new Error('ลิงก์เชื่อมต่อไม่ถูกต้อง');
+  if (!/^[\w-]{24,}$/.test(token || '')) throw new Error('รหัสเชื่อมต่อไม่ถูกต้อง');
+  S.saveSettings({ sheet: { webapp, token, sheetUrl: '' } });
+  LS.del('jj_sheet_sig');
+  sheet.status = 'idle';
+  notify();
+  await syncNow(true);
+}
+
 export function disconnect() {
   S.saveSettings({ sheet: null });
   LS.del('jj_sheet_sig');

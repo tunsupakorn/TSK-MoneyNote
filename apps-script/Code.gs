@@ -8,6 +8,7 @@
  * หลังจากนั้นทุกคำขอต้องมีรหัสเดียวกัน — ถ้าต้องการจับคู่ใหม่ ให้รัน resetPairing()
  */
 
+const APP_URL = 'https://tunsupakorn.github.io/jukjik/';
 const SHEET_TX = 'รายการ';
 const SHEET_MONTH = 'สรุปรายเดือน';
 const SHEET_CAT = 'แยกหมวด';
@@ -51,12 +52,19 @@ function showConnect() {
     'button{background:#FFC83D;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer;margin-top:8px}</style>';
   let html;
   if (url) {
-    html = css + '<p>✅ ชีตนี้พร้อมแล้ว' + (paired ? ' และ<b>จับคู่กับแอปแล้ว</b>' : '') + '</p>' +
-      '<div class="box"><b>ลิงก์ web app ของคุณ</b><input id="u" value="' + esc(url) + '" readonly onclick="this.select()">' +
-      '<button onclick="var i=document.getElementById(\'u\');i.select();document.execCommand(\'copy\');this.textContent=\'คัดลอกแล้ว ✓\'">📋 คัดลอกลิงก์</button></div>' +
-      '<ol><li>เปิดแอปจุกจิก › <b>⚙️ ตั้งค่า</b> › การ์ด <b>📗 Google Sheet</b></li>' +
-      '<li>วางลิงก์นี้ แล้วกด <b>เชื่อมต่อ</b> — เสร็จแล้ว! รายการจะถูกส่งมาที่ชีตนี้ และสลิปเก็บใน Google Drive ของคุณ</li></ol>' +
-      '<p style="color:#8C7C66">อย่าส่งลิงก์นี้ให้คนอื่น เครื่องแรกที่กดเชื่อมต่อจะเป็นเจ้าของ</p>';
+    // one-click connect: the sheet owner (who is the only one who can open this menu) issues a fresh key,
+    // and the app receives it in the link's #fragment (never sent to any server)
+    const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    PropertiesService.getScriptProperties().setProperty('TOKEN', token);
+    const link = APP_URL + '#connect=' + encodeURIComponent(url) + '&key=' + token;
+    html = css + '<p>✅ ชีตนี้พร้อมแล้ว' + (paired ? ' (การเชื่อมเดิมจะถูกแทนที่ด้วยปุ่มนี้)' : '') + '</p>' +
+      '<a href="' + esc(link) + '" target="_blank" style="display:block;text-align:center;background:#FFC83D;color:#2B2118;font-weight:bold;' +
+      'text-decoration:none;border-radius:12px;padding:14px;font-size:16px;margin:8px 0">🐣 เปิดแอปจุกจิกและเชื่อมต่อให้อัตโนมัติ</a>' +
+      '<p>กดปุ่มด้านบน แอปจะเปิดขึ้นแล้วถามยืนยัน กด <b>ตกลง</b> — เสร็จแล้ว! (ต้องล็อกอินแอปไว้ก่อน)</p>' +
+      '<details><summary style="cursor:pointer;color:#8C7C66">เชื่อมจากมือถือ / คัดลอกลิงก์เอง</summary>' +
+      '<div class="box">ส่งลิงก์นี้ไปเปิดในเครื่องที่ใช้แอป (เช่น ส่ง LINE หาตัวเอง)<input id="u" value="' + esc(link) + '" readonly onclick="this.select()">' +
+      '<button onclick="var i=document.getElementById(\'u\');i.select();document.execCommand(\'copy\');this.textContent=\'คัดลอกแล้ว ✓\'">📋 คัดลอกลิงก์เชื่อมต่อ</button></div></details>' +
+      '<p style="color:#8C7C66">อย่าส่งลิงก์นี้ให้คนอื่น ใครเปิดลิงก์นี้จะเชื่อมกับชีตของคุณได้</p>';
   } else {
     html = css + '<p>เหลืออีกขั้นเดียว: เปิดชีตนี้เป็น <b>web app</b> (ทำครั้งเดียว ~1 นาที)</p><ol>' +
       '<li>เมนู <b>ส่วนขยาย › Apps Script</b></li>' +
@@ -64,9 +72,9 @@ function showConnect() {
       '<li>ตรงไอคอนฟันเฟือง เลือก <b>เว็บแอป</b> (Web app)</li>' +
       '<li>ตั้งค่า: เรียกใช้ในฐานะ <b>ฉัน</b> · ผู้มีสิทธิ์เข้าถึง <b>ทุกคน</b> (Execute as: Me · Who has access: Anyone)</li>' +
       '<li>กด <b>ทำให้ใช้งานได้</b> แล้วกด <b>ให้สิทธิ์</b> › เลือกบัญชี › Advanced › Go to … › <b>Allow</b></li>' +
-      '<li>กลับมาที่ชีตนี้ เปิดเมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> อีกครั้ง จะได้ลิงก์ไปวางในแอป</li></ol>';
+      '<li>กลับมาที่ชีตนี้ เปิดเมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> อีกครั้ง จะมีปุ่มเปิดแอปและเชื่อมต่อให้อัตโนมัติ</li></ol>';
   }
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(460).setHeight(url ? 360 : 420), '🐣 เชื่อมกับแอปจุกจิก');
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(460).setHeight(url ? 340 : 420), '🐣 เชื่อมกับแอปจุกจิก');
 }
 
 function resetPairingMenu() {

@@ -306,7 +306,7 @@ function viewSettings() {
     ${geminiCard()}
 
     ${sheetCard()}
-    ${state.isOwner ? ownerCard() : ''}
+    ${S.inviteOnly && state.isOwner ? ownerCard() : ''}
 
     <section class="card"><h3>🎯 งบประมาณรายเดือน</h3>
       <div class="row gap"><input type="number" inputmode="decimal" placeholder="เช่น 15000" value="${state.settings.budget || ''}" data-input="budget">
@@ -445,13 +445,19 @@ async function saveGeminiKey(raw) {
 
 function sheetCard() {
   if (!Sheet.isConnected()) {
-    return `<section class="card" id="gsheet"><h3>📗 Google Sheet</h3>
-      <p class="muted small">คัดลอกทุกรายการลง Google Sheet ของคุณอัตโนมัติ ไว้ดู ทำสูตร หรือทำกราฟ (ข้อมูลหลักยังอยู่ใน Firebase)</p>
-      <input type="url" placeholder="วางลิงก์ web app (https://script.google.com/macros/s/…/exec)" data-input="sheeturl" autocomplete="off">
-      <div class="row gap wrap" style="margin-top:10px">
-        <button class="btn primary sm" data-action="sheet-connect">เชื่อมต่อ</button>
-        <a class="link small" href="guide.html#sheet-setup">วิธีสร้างลิงก์ web app</a>
-      </div>
+    return `<section class="card" id="gsheet"><h3>📗 Google Sheet & Drive <small class="muted">(ไม่บังคับ)</small></h3>
+      <p class="muted small">เก็บสำเนาทุกรายการไว้ใน Google Sheet และรูปสลิปไว้ใน Google Drive ของคุณเอง</p>
+      ${state.mode !== 'cloud' ? '<p class="small">🔐 ล็อกอินบัญชีก่อน แล้วค่อยเชื่อมชีต</p>' : ''}
+      <ol class="steps">
+        <li><a class="btn primary sm" href="${TEMPLATE_URL}" target="_blank" rel="noopener">① 📗 สร้างชีตของฉัน (กด “ทำสำเนา”) ↗</a></li>
+        <li><span class="small">② <b>บนคอมพิวเตอร์</b> เปิดชีตที่สร้าง › เมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> แล้วกดปุ่ม
+          <b>“เปิดแอปและเชื่อมต่อให้อัตโนมัติ”</b> — เสร็จ! ไม่ต้องคัดลอกลิงก์</span></li>
+      </ol>
+      <details class="more"><summary>มีลิงก์ web app อยู่แล้ว</summary>
+        <input type="url" placeholder="https://script.google.com/macros/s/…/exec" data-input="sheeturl" autocomplete="off">
+        <div class="row gap wrap"><button class="btn ghost sm" data-action="sheet-paste">📋 วางลิงก์</button>
+          <button class="btn primary sm" data-action="sheet-connect">เชื่อมต่อ</button></div>
+      </details>
       ${Sheet.sheet.status === 'error' ? `<p class="err">${esc(Sheet.sheet.msg)}</p>` : ''}
     </section>`;
   }
@@ -619,6 +625,32 @@ document.addEventListener('drop', e => {
   e.preventDefault(); zone.classList.remove('over');
   addToTray(e.dataTransfer?.files || []);
 });
+
+// One-click Sheet connect: the Sheet's 🐣 menu opens the app with #connect=<web app url>&key=<key>.
+// The fragment never reaches a server; it is kept until the account is ready, then removed from the address bar.
+function takeConnectLink() {
+  const m = location.hash.match(/^#connect=([^&]+)&key=([\w-]+)$/);
+  if (m) {
+    try { sessionStorage.setItem('jj_connect', JSON.stringify({ webapp: decodeURIComponent(m[1]), key: m[2] })); } catch {}
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  let pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem('jj_connect') || 'null'); } catch {}
+  if (!pending) return;
+  ui.view = 'settings';
+  if (state.cloudConfigured && !(state.mode === 'cloud' && state.syncStatus === 'synced')) {
+    if (state.syncStatus === 'signed-out' && !takeConnectLink.told) { takeConnectLink.told = true; toast('ล็อกอินก่อน แล้วจุกจิกจะเชื่อม Google Sheet ให้เอง'); render(); }
+    return; // try again once the account has loaded
+  }
+  try { sessionStorage.removeItem('jj_connect'); } catch {}
+  if (!confirm(`เชื่อม Google Sheet นี้กับบัญชี ${state.user?.email || 'นี้'}?\n(ถ้าเคยเชื่อมชีตอื่นไว้ จะเปลี่ยนมาใช้ชีตนี้แทน)`)) return render();
+  toast('กำลังเชื่อม Google Sheet…');
+  Sheet.connectWithKey(pending.webapp, pending.key)
+    .then(() => toast(Sheet.sheet.status === 'error' ? '⚠️ ' + Sheet.sheet.msg : 'เชื่อม Google Sheet แล้ว 📗'))
+    .catch(err => { Sheet.sheet.status = 'error'; Sheet.sheet.msg = err.message; })
+    .finally(() => render());
+}
+window.addEventListener('hashchange', takeConnectLink);
 
 // Files shared to the app (Android share sheet → "จุกจิก"): the service worker parks them in a cache.
 async function takeSharedFiles() {
@@ -859,6 +891,17 @@ document.addEventListener('click', async e => {
       catch (err) { Sheet.sheet.status = 'error'; Sheet.sheet.msg = err.message; render(); }
       return;
     }
+    case 'sheet-paste': {
+      try {
+        const text = (await navigator.clipboard.readText()).trim();
+        const m = text.match(/#connect=([^&\s]+)&key=([\w-]+)/);
+        if (m) { location.hash = `connect=${m[1]}&key=${m[2]}`; return takeConnectLink(); }
+        $('[data-input="sheeturl"]').value = text;
+        if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(text)) $('[data-action="sheet-connect"]').click();
+        else toast('ในคลิปบอร์ดไม่ใช่ลิงก์ web app');
+      } catch { toast('อ่านคลิปบอร์ดไม่ได้ ลองกดค้างในช่องแล้วเลือก “วาง”'); }
+      return;
+    }
     case 'sheet-sync':
       if (state.cloudConfigured && state.syncStatus !== 'synced') return toast('รอซิงก์กับบัญชีให้เสร็จก่อน');
       return Sheet.syncNow(true);
@@ -1000,8 +1043,10 @@ S.subscribe(() => {
   // a key saved only on this device (older version) is shared to the account once it is synced
   if (prefs.geminiKey && state.mode === 'cloud' && state.syncStatus === 'synced' && !state.settings.geminiKey) S.saveSettings({ geminiKey: prefs.geminiKey });
   render(); Sheet.schedule();
+  if (state.mode === 'cloud' && state.syncStatus === 'synced' && sessionStorage.getItem?.('jj_connect')) setTimeout(takeConnectLink, 0);
 });
 render();
 S.initStore();
 takeSharedFiles();
+takeConnectLink();
 if ('serviceWorker' in navigator && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(() => {});

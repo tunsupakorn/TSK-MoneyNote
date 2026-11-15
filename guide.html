@@ -54,7 +54,6 @@
     .g-tip { background: var(--surface-2); border-radius: 12px; padding: 9px 12px; font-size: .88rem; margin-top: 8px; }
     .g-body b { color: var(--text); font-weight: 500; }
     .g-body kbd { font-family: inherit; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: .85em; white-space: nowrap; }
-    .g-copy { margin-left: auto; font-size: .78rem; }
     .g-empty { text-align: center; color: var(--muted); padding: 30px 10px; }
     .g-cta { margin-top: 26px; text-align: center; }
     mark { background: rgba(255, 200, 61, .45); color: inherit; border-radius: 3px; }
@@ -232,20 +231,12 @@ const GUIDE = [
       '<p>จุกจิกคัดลอกทุกรายการลง Google Sheet ของคุณอัตโนมัติ ประมาณ 5 วินาทีหลังมีการเปลี่ยนแปลง (รวมถึงแก้ไขและลบ) ในชีตมี 4 แท็บ:</p><ul><li><b>รายการ</b> – ทุกรายการ พร้อมคอลัมน์ ยอดสุทธิ (+/−) ไว้รวมยอดง่ายๆ</li><li><b>สรุปรายเดือน</b> – รายรับ รายจ่าย คงเหลือ ของแต่ละเดือน</li><li><b>แยกหมวด</b> – รายจ่ายแต่ละหมวด 12 เดือนล่าสุด</li><li><b>เกี่ยวกับ</b> – เวลาซิงก์ล่าสุด</li></ul><p class="g-tip">💡 ชีตถูกเขียนทับทุกครั้งที่ซิงก์ ถ้าแก้ในชีตจะหาย ถ้าอยากทำสูตรหรือกราฟเพิ่ม ให้สร้างแท็บใหม่แล้วดึงข้อมูลจากแท็บ “รายการ”</p>' },
     { id: 'drive-slips', q: 'เก็บรูปสลิปไว้ใน Google Drive', body:
       '<p>เมื่อเชื่อม Google Sheet แล้ว สลิปที่บันทึกจะถูกเก็บในโฟลเดอร์ <b>“จุกจิก JukJik — สลิป”</b> ใน Google Drive ของคุณ แยกโฟลเดอร์ตามเดือน ชื่อไฟล์บอกวันที่ เวลา ประเภท และยอด</p><ul><li>รายการที่มีสลิปจะมี 📎 ในหน้าหลัก แตะรายการแล้วกด <b>📎 ดูสลิปใน Google Drive</b></li><li>ในชีต “รายการ” มีคอลัมน์ <b>สลิป</b> พร้อมลิงก์</li><li>เปิดหรือปิดได้ที่ <b>⚙️ ตั้งค่า</b> › <b>Google Sheet &amp; Drive</b> › ตั้งค่าเพิ่มเติม</li></ul>' },
-    { id: 'sheet-template', q: 'คนอื่นอยากได้ Google Sheet ของตัวเอง', steps: [
-      'เปิดลิงก์ชีตต้นแบบ <b>docs.google.com/spreadsheets/d/1IT8M4VotXmahde_1bo0Shdfwyem8lhZWQuTZL5uCnH8/copy</b> แล้วกด <b>ทำสำเนา</b> (ได้ชีตและสคริปต์เป็นของตัวเอง ข้อมูลไม่ปนกับใคร)',
-      'ในสำเนา เปิดเมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> แล้วทำตามขั้นตอนบนจอ (เปิดเป็นเว็บแอป ~1 นาที กดอนุญาต)',
-      'เปิดเมนูเดิมอีกครั้ง กด <b>📋 คัดลอกลิงก์</b>',
-      'ในแอปจุกจิก › <b>⚙️ ตั้งค่า</b> › <b>📗 Google Sheet</b> วางลิงก์ แล้วกด <b>เชื่อมต่อ</b>'],
-      tip: 'สลิปจะเก็บใน Google Drive ของคนนั้นเอง ตอนกดอนุญาต Google จะเตือนว่าแอปยังไม่ได้รับการยืนยัน เป็นเรื่องปกติของสคริปต์ส่วนตัว ให้กด Advanced › Go to … › Allow' },
-    { id: 'invite', q: 'ชวนคนอื่นมาใช้ / จำกัดคนที่ใช้ได้ (สำหรับเจ้าของแอป)', body:
-      '<p>แอปเปิดให้ใช้ได้<b>เฉพาะคุณ และอีเมลที่คุณอนุญาต</b> ข้อมูลของแต่ละคนแยกกัน ไม่มีใครเห็นของคนอื่น</p><ol class="g-steps"><li><span>ไปที่ <b>⚙️ ตั้งค่า</b> › <b>👥 ใครใช้แอปได้บ้าง</b> (เห็นเฉพาะเจ้าของแอป)</span></li><li><span>ใส่อีเมลของคนที่จะชวน (ใส่ชื่อเล่นด้วยก็ได้) แล้วกด <b>อนุญาต</b></span></li><li><span>กด <b>ข้อความชวน</b> แล้วส่งทาง LINE ได้เลย ข้อความมีลิงก์แอป วิธีติดตั้ง และลิงก์ชีตต้นแบบ</span></li></ol><p>คนที่สมัครด้วยอีเมลและรหัสผ่านต้องกดลิงก์ยืนยันในอีเมลก่อน ส่วนบัญชี Google ใช้ได้ทันที ถ้าอยากเปิดให้ทุกคนที่มีลิงก์ใช้ได้ ให้ติ๊ก <b>เปิดให้ทุกคนที่มีลิงก์ใช้ได้</b></p>' },
-    { id: 'sheet-setup', q: 'เชื่อม Google Sheet (ทำครั้งเดียว)', steps: [
-      'ไปที่ <b>⚙️ ตั้งค่า</b> › การ์ด <b>📗 Google Sheet</b>',
-      'วาง<b>ลิงก์ web app</b> ของสคริปต์ (ขึ้นต้นด้วย https://script.google.com/macros/s/ และลงท้ายด้วย /exec)',
-      'กด <b>เชื่อมต่อ</b> แอปจะส่งข้อมูลทั้งหมดลงชีตทันที',
-      'กด <b>เปิด Google Sheet</b> เพื่อดู'],
-      tip: 'เชื่อมในเครื่องเดียวพอ เครื่องอื่นที่ล็อกอินบัญชีเดียวกันจะเชื่อมตามอัตโนมัติ ต้องล็อกอินบัญชีให้ซิงก์เสร็จก่อน แอปจึงจะส่งข้อมูลลงชีต' },
+    { id: 'sheet-setup', q: 'เชื่อม Google Sheet & Drive (ทำครั้งเดียว ~2 นาที)', steps: [
+      'ในแอป ไปที่ <b>⚙️ ตั้งค่า</b> › <b>📗 Google Sheet &amp; Drive</b> › กด <b>① สร้างชีตของฉัน</b> แล้วกด <b>ทำสำเนา</b>',
+      '<b>บนคอมพิวเตอร์</b> เปิดชีตที่สร้าง › เมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> (ครั้งแรกจะให้กด “อนุญาต”)',
+      'ถ้าขึ้นว่า “เหลืออีกขั้นเดียว” ให้ทำตามขั้นตอนบนจอ (เปิดเป็นเว็บแอป) แล้วเปิดเมนูเดิมอีกครั้ง',
+      'กดปุ่ม <b>🐣 เปิดแอปจุกจิกและเชื่อมต่อให้อัตโนมัติ</b> › แอปถามยืนยัน › กด <b>ตกลง</b> เสร็จแล้ว!'],
+      tip: 'เชื่อมครั้งเดียว ทุกเครื่องที่ล็อกอินบัญชีเดียวกันใช้ได้เลย ถ้าใช้แอปบนมือถือ ในหน้าต่างเชื่อมต่อกด “เชื่อมจากมือถือ / คัดลอกลิงก์เอง” แล้วส่งลิงก์ทาง LINE หาตัวเอง เปิดบนมือถือได้เลย ตอนกดอนุญาต Google จะเตือนว่าแอปยังไม่ได้รับการยืนยัน เป็นเรื่องปกติของสคริปต์ส่วนตัว (Advanced › Go to … › Allow)' },
     { id: 'sheet-problem', q: 'Google Sheet ไม่อัปเดต', body:
       '<ul><li>ดูข้อความในการ์ด <b>📗 Google Sheet</b> ในตั้งค่า แล้วกด <b>ซิงก์ตอนนี้</b></li><li><b>“สคริปต์นี้จับคู่กับแอปอื่นไว้แล้ว”</b> – เปิดหน้าแก้ไขสคริปต์ เลือกฟังก์ชัน <b>resetPairing</b> แล้วกด <b>เรียกใช้</b> จากนั้นเชื่อมใหม่ในแอป</li><li><b>“สคริปต์ตอบกลับไม่ถูกต้อง”</b> – ตรวจว่าลิงก์ถูกต้อง และสคริปต์ได้รับอนุญาต (Allow) แล้ว</li></ul>' },
     { id: 'forgot', q: 'ลืมรหัสผ่าน', steps: ['ในหน้าล็อกอิน กรอกอีเมลก่อน', 'กด <b>ลืมรหัสผ่าน</b>', 'เปิดลิงก์ในอีเมลเพื่อตั้งรหัสใหม่'] },
@@ -266,8 +257,7 @@ const strip = html => html.replace(/<[^>]+>/g, ' ');
 function itemHTML(it) {
   const body = (it.steps ? `<ol class="g-steps">${it.steps.map(s => `<li><span>${s}</span></li>`).join('')}</ol>` : '')
     + (it.body || '') + (it.tip ? `<p class="g-tip">💡 ${it.tip}</p>` : '');
-  return `<details class="g-item" id="${it.id}"><summary>${it.q}</summary><div class="g-body">${body}
-    <button class="link g-copy" data-copy="${it.id}">🔗 คัดลอกลิงก์หัวข้อนี้</button></div></details>`;
+  return `<details class="g-item" id="${it.id}"><summary>${it.q}</summary><div class="g-body">${body}</div></details>`;
 }
 
 function render(q = '') {
@@ -290,14 +280,6 @@ function render(q = '') {
 $('#cats').innerHTML = GUIDE.map(s => `<a class="g-cat" href="#sec-${s.id}"><span aria-hidden="true">${s.icon}</span><b>${s.title}</b><small>${s.sub}</small></a>`).join('');
 render();
 $('#q').addEventListener('input', e => render(e.target.value));
-
-document.addEventListener('click', e => {
-  const b = e.target.closest('[data-copy]');
-  if (!b) return;
-  const url = location.href.split('#')[0] + '#' + b.dataset.copy;
-  const done = () => { const t = $('#toast'); t.textContent = 'คัดลอกลิงก์แล้ว'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); };
-  (navigator.clipboard?.writeText(url) || Promise.reject()).then(done).catch(() => { prompt('คัดลอกลิงก์นี้', url); });
-});
 
 // open a topic from a #link
 function openHash() {

@@ -9,5 +9,7 @@ export const firebaseConfig = {
   appId: "1:114129745621:web:f7f0c1c59c71aa13da945c"
 };
 
-// เจ้าของแอป: เห็นการ์ด "ผู้ใช้ที่อนุญาต" ในตั้งค่า (ต้องตรงกับ isOwner() ใน firestore.rules)
+// เจ้าของแอป (ใช้เมื่อเปิดโหมดเฉพาะอีเมลที่อนุญาต)
 export const ownerUid = "bccZ2Cvc0sYEY9VPt6BCyqIiU9R2";
+// false = ใครมีลิงก์ก็ใช้ได้ (ข้อมูลแยกกัน) · true = เฉพาะอีเมลที่อนุญาต (ต้องใช้ firestore.rules แบบ invite-only ด้วย)
+export const inviteOnly = false;
