@@ -1,6 +1,6 @@
 // Reads bank slips (images) and credit-card statements (PDF) with the Gemini API.
 
-export const DEFAULT_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_MODEL = 'gemini-3.8-flash-lite'; // fast & light; the real name is looked up if this one doesn't exist
 let onModelChange = () => {};
 export function setModelChangeHandler(fn) { onModelChange = fn; }
 let onFallback = () => {};
@@ -149,9 +149,10 @@ async function callOnce(key, model, body, timeoutMs) {
   }
 }
 
-// Other Flash models this key can use, newest first — used when the main model is overloaded.
+// Picks another Flash model this key can use: same family first (Lite ↔ Lite), stable before
+// preview, newest first. Used when the model is overloaded or its name doesn't exist.
 let modelListCache = null;
-async function pickFallback(key, current) {
+async function pickFallback(key, current, wantLite = /lite/.test(current)) {
   try {
     if (!modelListCache) {
       const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
@@ -164,7 +165,8 @@ async function pickFallback(key, current) {
     const ver = n => parseFloat(n.match(/gemini-(\d+(?:\.\d+)?)/)?.[1] || 0);
     const ok = modelListCache.filter(n => n !== current && /^gemini-.*flash/.test(n) &&
       !/image|tts|audio|live|embed|vision|thinking/.test(n));
-    ok.sort((a, b) => (/lite/.test(a) - /lite/.test(b)) || (/preview|exp/.test(a) - /preview|exp/.test(b)) || ver(b) - ver(a));
+    const family = n => (/lite/.test(n) === wantLite ? 0 : 1);
+    ok.sort((a, b) => (family(a) - family(b)) || (/preview|exp/.test(a) - /preview|exp/.test(b)) || ver(b) - ver(a));
     return ok[0] || null;
   } catch { return null; }
 }
@@ -208,6 +210,15 @@ async function generate(key, model, body, opts = {}) {
     if (!opts.retiredHop && suggested && suggested !== model) {
       onModelChange(suggested);
       return generate(key, suggested, body, { ...opts, retiredHop: true });
+    }
+    // model name doesn't exist for this key (e.g. a guessed Flash-Lite name): find the real one and remember it
+    if (!opts.resolvedHop && (r.status === 404 || /not found|no longer available|is not supported/i.test(r.msg))) {
+      onStatus('กำลังหารุ่น Gemini ที่ใช้ได้…');
+      const alt = await pickFallback(key, model);
+      if (alt) {
+        onModelChange(alt);
+        return generate(key, alt, body, { ...opts, retiredHop: true, resolvedHop: true });
+      }
     }
     if (!BUSY.has(r.status)) break;
   }

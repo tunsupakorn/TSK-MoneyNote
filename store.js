@@ -48,6 +48,12 @@ import { DEFAULT_MODEL } from './gemini.js';
 const RETIRED_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 export const prefs = Object.assign({ theme: 'auto', geminiKey: '', geminiModel: DEFAULT_MODEL, onboarded: false }, LS.get('jj_prefs', {}));
 if (!prefs.geminiModel || RETIRED_MODELS.includes(prefs.geminiModel)) { prefs.geminiModel = DEFAULT_MODEL; LS.set('jj_prefs', prefs); }
+// one-time switch of the old default (gemini-3.8-flash) to Flash-Lite; a later manual choice is kept
+if (!prefs.liteDefaultApplied) {
+  if (prefs.geminiModel === 'gemini-3.8-flash') prefs.geminiModel = DEFAULT_MODEL;
+  prefs.liteDefaultApplied = true;
+  LS.set('jj_prefs', prefs);
+}
 export function savePrefs(patch) { Object.assign(prefs, patch); LS.set('jj_prefs', prefs); }
 
 const listeners = new Set();
