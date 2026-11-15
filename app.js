@@ -1,5 +1,5 @@
 import * as S from './store.js';
-import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler, setFallbackHandler } from './gemini.js';
+import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler, setFallbackHandler, setStatusHandler, cancelAll, resetCancel } from './gemini.js';
 import { categoryBars, dailyColumns, bindColumnTips } from './charts.js';
 import * as Sheet from './sheets.js';
 
@@ -201,7 +201,9 @@ function viewScan() {
     </label>
     <label class="check"><input type="checkbox" data-input="only30" ${sc.only30 ? 'checked' : ''}> เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</label>
     ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>จุกจิกกำลังอ่าน… ${sc.done}/${sc.total}</p>
-      <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div></section>` : ''}
+      <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div>
+      <small class="muted" id="scan-note">${esc(scanNote())}</small>
+      <button class="btn ghost sm" data-action="scan-cancel" ${sc.cancel ? 'disabled' : ''}>${sc.cancel ? 'กำลังยกเลิก…' : 'ยกเลิก'}</button></section>` : ''}
     ${sc.errors.length ? `<section class="card error"><b>อ่านไม่สำเร็จ ${sc.errors.length} ไฟล์</b><ul>${sc.errors.map(e => `<li>${esc(e.name)}: ${esc(e.msg)}</li>`).join('')}</ul>
       ${!sc.busy && sc.errors.some(e => e.file) ? `<button class="btn primary sm" data-action="scan-retry">🔄 ลองอ่านไฟล์เหล่านี้อีกครั้ง</button>` : ''}</section>` : ''}
     ${sc.items.length ? `<section class="review">
@@ -388,10 +390,14 @@ function isDup(it, existing) {
   return existing.some(t => (it.ref && t.ref && t.ref === it.ref) ||
     (t.date === it.date && Number(t.amount) === Number(it.amount) && t.type === it.type && (t.merchant || '') === (it.merchant || '') && (t.time || '') === (it.time || '')));
 }
+const scanNote = () => `${ui.scan.note || 'ปกติใช้เวลา 5–20 วินาทีต่อใบ'} · ${Math.round((Date.now() - (ui.scan.started || Date.now())) / 1000)} วินาที`;
+
 async function runScan(files) {
   const sc = ui.scan;
-  Object.assign(sc, { busy: true, done: 0, total: files.length, errors: [] });
+  Object.assign(sc, { busy: true, done: 0, total: files.length, errors: [], note: '', cancel: false, started: Date.now() });
+  resetCancel();
   render();
+  const ticker = setInterval(() => { const el = $('#scan-note'); if (el) el.textContent = scanNote(); }, 1000);
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
   const cutISO = new Date(cutoff - cutoff.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const queue = [...files];
@@ -399,6 +405,8 @@ async function runScan(files) {
   const worker = async () => {
     while (queue.length) {
       const f = queue.shift();
+      if (sc.cancel) { sc.errors.push({ name: f.name, msg: 'ยกเลิกแล้ว', file: f }); sc.done++; continue; }
+      sc.note = '';
       try {
         const found = await readFile(f, opts);
         if (!found.length) sc.errors.push({ name: f.name, msg: 'ไม่พบรายการเงินในไฟล์นี้', file: f });
@@ -415,8 +423,9 @@ async function runScan(files) {
     }
   };
   await Promise.all([worker(), worker(), worker()]);
+  clearInterval(ticker);
   sc.items.sort((a, b) => b.date.localeCompare(a.date));
-  sc.busy = false;
+  Object.assign(sc, { busy: false, note: '', cancel: false });
   render();
 }
 
@@ -475,6 +484,7 @@ document.addEventListener('click', async e => {
     case 'show-ob': ui.obStep = 0; S.savePrefs({ onboarded: false }); window.scrollTo(0, 0); return render();
     case 'goto-gemini': go('settings'); return $('#gemini')?.scrollIntoView({ behavior: 'smooth' });
     case 'scan-clear': Object.assign(ui.scan, { items: [], errors: [] }); return render();
+    case 'scan-cancel': ui.scan.cancel = true; cancelAll(); return render();
     case 'scan-retry': { const files = ui.scan.errors.map(e => e.file).filter(Boolean); if (files.length) runScan(files); return; }
     case 'scan-save': {
       const keep = ui.scan.items.filter(i => i.keep).map(({ keep, dup, old, fileName, ...t }) => t);
@@ -625,6 +635,7 @@ setModelChangeHandler(m => {
   toast(`เปลี่ยนเป็นโมเดล ${m} ให้อัตโนมัติ`);
 });
 setFallbackHandler(m => toast(`รุ่นหลักคนใช้เยอะ ใช้ ${m} แทนชั่วคราว`));
+setStatusHandler(msg => { ui.scan.note = msg; if (ui.view === 'scan') render(); });
 Sheet.onSheetChange(() => { if (ui.view === 'settings') render(); });
 S.subscribe(() => { render(); Sheet.schedule(); });
 render();

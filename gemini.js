@@ -5,6 +5,16 @@ let onModelChange = () => {};
 export function setModelChangeHandler(fn) { onModelChange = fn; }
 let onFallback = () => {};
 export function setFallbackHandler(fn) { onFallback = fn; }
+let onStatus = () => {};
+export function setStatusHandler(fn) { onStatus = fn; }
+
+// Time limits so a stuck request never hangs the scan screen.
+const CALL_TIMEOUT = 40000;   // one request
+const FILE_DEADLINE = 120000; // all retries for one file
+let cancelled = false;
+const live = new Set();
+export function cancelAll() { cancelled = true; live.forEach(c => c.abort()); live.clear(); }
+export function resetCancel() { cancelled = false; }
 
 const ENDPOINT = m =>`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`;
 
@@ -112,21 +122,31 @@ export async function testKey(key, model) {
   return true;
 }
 
-const BUSY = new Set([0, 429, 500, 502, 503, 504]); // 0 = network hiccup
+const BUSY = new Set([0, 408, 429, 500, 502, 503, 504]); // 0 = network hiccup, 408 = our timeout
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function callOnce(key, model, body) {
-  let res;
+async function callOnce(key, model, body, timeoutMs) {
+  const ctrl = new AbortController();
+  live.add(ctrl);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, Math.max(1000, timeoutMs));
   try {
-    res = await fetch(ENDPOINT(model), {
+    const res = await fetch(ENDPOINT(model), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify(body),
+      signal: ctrl.signal,
     });
-  } catch { return { ok: false, status: 0, msg: '' }; }
-  if (res.ok) return { ok: true, data: await res.json() };
-  let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
-  return { ok: false, status: res.status, msg };
+    if (res.ok) return { ok: true, data: await res.json() };
+    let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
+    return { ok: false, status: res.status, msg };
+  } catch {
+    if (cancelled) return { ok: false, status: -1, msg: 'cancelled' };
+    return { ok: false, status: timedOut ? 408 : 0, msg: timedOut ? 'timeout' : '' };
+  } finally {
+    clearTimeout(timer);
+    live.delete(ctrl);
+  }
 }
 
 // Other Flash models this key can use, newest first — used when the main model is overloaded.
@@ -134,7 +154,8 @@ let modelListCache = null;
 async function pickFallback(key, current) {
   try {
     if (!modelListCache) {
-      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
+        { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(10000) });
       if (!res.ok) return null;
       modelListCache = ((await res.json()).models || [])
         .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
@@ -149,6 +170,8 @@ async function pickFallback(key, current) {
 }
 
 function friendlyError({ status, msg }, model) {
+  if (status === -1) return new Error('ยกเลิกแล้ว');
+  if (status === 408) return new Error('Gemini ตอบช้าเกินไป (เซิร์ฟเวอร์อาจยุ่ง) ลองใหม่อีกครั้งในอีกสักครู่');
   if (status === 0) return new Error('เชื่อมต่อ Gemini ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่');
   if (status === 400 && /api key/i.test(msg)) return new Error('API key ไม่ถูกต้อง');
   if (status === 403) return new Error('API key ไม่มีสิทธิ์ใช้งาน (403)');
@@ -165,12 +188,22 @@ function friendlyError({ status, msg }, model) {
 //  - retired model whose error names a replacement: switch to it and remember it
 async function generate(key, model, body, opts = {}) {
   model = model || DEFAULT_MODEL;
-  let last;
+  const deadline = opts.deadline || Date.now() + FILE_DEADLINE;
+  opts = { ...opts, deadline };
+  let last = { status: 408, msg: 'timeout' };
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt) await sleep(1000 * 2 ** (attempt - 1) + Math.random() * 400);
-    const r = await callOnce(key, model, body);
+    if (cancelled) return Promise.reject(friendlyError({ status: -1 }, model));
+    if (attempt) {
+      onStatus(`Gemini ยุ่งอยู่ กำลังลองใหม่ (${attempt + 1}/3)…`);
+      await sleep(1000 * 2 ** (attempt - 1) + Math.random() * 400);
+    }
+    const left = deadline - Date.now();
+    if (left < 3000) break;
+    const r = await callOnce(key, model, body, Math.min(CALL_TIMEOUT, left));
     if (r.ok) return r.data;
     last = r;
+    if (r.status === -1) throw friendlyError(r, model);
+    if (r.status === 408 && attempt >= 1 && !opts.fallbackHop) break; // two slow tries: leave time for a backup model
     const suggested = r.msg.match(/use\s+(?:models\/)?(gemini-[\w.-]*\w)/i)?.[1];
     if (!opts.retiredHop && suggested && suggested !== model) {
       onModelChange(suggested);
@@ -178,11 +211,12 @@ async function generate(key, model, body, opts = {}) {
     }
     if (!BUSY.has(r.status)) break;
   }
-  if (BUSY.has(last.status) && last.status !== 0 && !opts.fallbackHop) {
+  if (BUSY.has(last.status) && last.status !== 0 && !opts.fallbackHop && !cancelled && deadline - Date.now() > 10000) {
     const alt = await pickFallback(key, model);
     if (alt) {
       onFallback(alt);
-      return generate(key, alt, body, { retiredHop: true, fallbackHop: true });
+      onStatus(`รุ่นหลักยุ่ง กำลังลองด้วย ${alt}…`);
+      return generate(key, alt, body, { retiredHop: true, fallbackHop: true, deadline });
     }
   }
   throw friendlyError(last, model);
