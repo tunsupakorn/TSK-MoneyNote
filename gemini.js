@@ -3,6 +3,8 @@
 export const DEFAULT_MODEL = 'gemini-3.8-flash';
 let onModelChange = () => {};
 export function setModelChangeHandler(fn) { onModelChange = fn; }
+let onFallback = () => {};
+export function setFallbackHandler(fn) { onFallback = fn; }
 
 const ENDPOINT = m =>`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`;
 
@@ -110,10 +112,10 @@ export async function testKey(key, model) {
   return true;
 }
 
-// Calls Gemini. If Google has retired the model and its error names a replacement
-// ("...use models/gemini-x-flash..."), switch to that model once and remember it.
-async function generate(key, model, body, retried = false) {
-  model = model || DEFAULT_MODEL;
+const BUSY = new Set([0, 429, 500, 502, 503, 504]); // 0 = network hiccup
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function callOnce(key, model, body) {
   let res;
   try {
     res = await fetch(ENDPOINT(model), {
@@ -121,18 +123,67 @@ async function generate(key, model, body, retried = false) {
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify(body),
     });
-  } catch { throw new Error('เชื่อมต่อ Gemini ไม่ได้ ตรวจอินเทอร์เน็ต'); }
-  if (res.ok) return res.json();
+  } catch { return { ok: false, status: 0, msg: '' }; }
+  if (res.ok) return { ok: true, data: await res.json() };
   let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
-  const suggested = msg.match(/use\s+(?:models\/)?(gemini-[\w.-]*\w)/i)?.[1];
-  if (!retried && suggested && suggested !== model) {
-    onModelChange(suggested);
-    return generate(key, suggested, body, true);
+  return { ok: false, status: res.status, msg };
+}
+
+// Other Flash models this key can use, newest first — used when the main model is overloaded.
+let modelListCache = null;
+async function pickFallback(key, current) {
+  try {
+    if (!modelListCache) {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+      if (!res.ok) return null;
+      modelListCache = ((await res.json()).models || [])
+        .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+        .map(m => m.name.replace(/^models\//, ''));
+    }
+    const ver = n => parseFloat(n.match(/gemini-(\d+(?:\.\d+)?)/)?.[1] || 0);
+    const ok = modelListCache.filter(n => n !== current && /^gemini-.*flash/.test(n) &&
+      !/image|tts|audio|live|embed|vision|thinking/.test(n));
+    ok.sort((a, b) => (/lite/.test(a) - /lite/.test(b)) || (/preview|exp/.test(a) - /preview|exp/.test(b)) || ver(b) - ver(a));
+    return ok[0] || null;
+  } catch { return null; }
+}
+
+function friendlyError({ status, msg }, model) {
+  if (status === 0) return new Error('เชื่อมต่อ Gemini ไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่');
+  if (status === 400 && /api key/i.test(msg)) return new Error('API key ไม่ถูกต้อง');
+  if (status === 403) return new Error('API key ไม่มีสิทธิ์ใช้งาน (403)');
+  if (status === 404 || /no longer available|not found/i.test(msg))
+    return new Error(`โมเดล "${model}" ใช้ไม่ได้แล้ว ลองเปลี่ยนชื่อโมเดลในตั้งค่า (ดูรายชื่อใน aistudio.google.com)`);
+  if (status === 429) return new Error('ใช้เกินโควตาฟรีชั่วคราว รอประมาณ 1 นาทีแล้วลองใหม่');
+  if (status === 503 || status === 500 || status === 502 || status === 504)
+    return new Error('เซิร์ฟเวอร์ Gemini มีคนใช้เยอะชั่วคราว ลองใหม่อีกครั้งในอีกสักครู่');
+  return new Error(`Gemini ตอบกลับผิดพลาด (${status}) ${msg}`.trim());
+}
+
+// Calls Gemini with automatic recovery:
+//  - busy/overloaded (503, 429, 5xx): retry with backoff, then try another Flash model once (not saved)
+//  - retired model whose error names a replacement: switch to it and remember it
+async function generate(key, model, body, opts = {}) {
+  model = model || DEFAULT_MODEL;
+  let last;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await sleep(1000 * 2 ** (attempt - 1) + Math.random() * 400);
+    const r = await callOnce(key, model, body);
+    if (r.ok) return r.data;
+    last = r;
+    const suggested = r.msg.match(/use\s+(?:models\/)?(gemini-[\w.-]*\w)/i)?.[1];
+    if (!opts.retiredHop && suggested && suggested !== model) {
+      onModelChange(suggested);
+      return generate(key, suggested, body, { ...opts, retiredHop: true });
+    }
+    if (!BUSY.has(r.status)) break;
   }
-  if (res.status === 400 && /api key/i.test(msg)) throw new Error('API key ไม่ถูกต้อง');
-  if (res.status === 403) throw new Error('API key ไม่มีสิทธิ์ใช้งาน (403)');
-  if (res.status === 404 || /no longer available|not found/i.test(msg))
-    throw new Error(`โมเดล "${model}" ใช้ไม่ได้แล้ว ลองเปลี่ยนชื่อโมเดลในตั้งค่า (ดูรายชื่อใน aistudio.google.com)`);
-  if (res.status === 429) throw new Error('ใช้เกินโควตาฟรีชั่วคราว รอสักครู่แล้วลองใหม่');
-  throw new Error(`Gemini ตอบกลับผิดพลาด (${res.status}) ${msg}`.trim());
+  if (BUSY.has(last.status) && last.status !== 0 && !opts.fallbackHop) {
+    const alt = await pickFallback(key, model);
+    if (alt) {
+      onFallback(alt);
+      return generate(key, alt, body, { retiredHop: true, fallbackHop: true });
+    }
+  }
+  throw friendlyError(last, model);
 }

@@ -1,5 +1,5 @@
 import * as S from './store.js';
-import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler } from './gemini.js';
+import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler, setFallbackHandler } from './gemini.js';
 import { categoryBars, dailyColumns, bindColumnTips } from './charts.js';
 
 const { state, prefs } = S;
@@ -201,7 +201,8 @@ function viewScan() {
     <label class="check"><input type="checkbox" data-input="only30" ${sc.only30 ? 'checked' : ''}> เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</label>
     ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>จุกจิกกำลังอ่าน… ${sc.done}/${sc.total}</p>
       <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div></section>` : ''}
-    ${sc.errors.length ? `<section class="card error"><b>อ่านไม่สำเร็จ ${sc.errors.length} ไฟล์</b><ul>${sc.errors.map(e => `<li>${esc(e.name)}: ${esc(e.msg)}</li>`).join('')}</ul></section>` : ''}
+    ${sc.errors.length ? `<section class="card error"><b>อ่านไม่สำเร็จ ${sc.errors.length} ไฟล์</b><ul>${sc.errors.map(e => `<li>${esc(e.name)}: ${esc(e.msg)}</li>`).join('')}</ul>
+      ${!sc.busy && sc.errors.some(e => e.file) ? `<button class="btn primary sm" data-action="scan-retry">🔄 ลองอ่านไฟล์เหล่านี้อีกครั้ง</button>` : ''}</section>` : ''}
     ${sc.items.length ? `<section class="review">
       <div class="row between"><h3>ตรวจก่อนบันทึก (${sc.items.length})</h3>
         <button class="link" data-action="scan-clear">ล้าง</button></div>
@@ -368,7 +369,7 @@ async function runScan(files) {
       const f = queue.shift();
       try {
         const found = await readFile(f, opts);
-        if (!found.length) sc.errors.push({ name: f.name, msg: 'ไม่พบรายการเงินในไฟล์นี้' });
+        if (!found.length) sc.errors.push({ name: f.name, msg: 'ไม่พบรายการเงินในไฟล์นี้', file: f });
         found.forEach(t => {
           const it = { ...t, fileName: f.name };
           it.dup = isDup(it, state.tx) || isDup(it, sc.items);
@@ -376,7 +377,7 @@ async function runScan(files) {
           it.keep = !it.dup && !(sc.only30 && it.old);
           sc.items.push(it);
         });
-      } catch (e) { sc.errors.push({ name: f.name, msg: e.message }); }
+      } catch (e) { sc.errors.push({ name: f.name, msg: e.message, file: f }); }
       sc.done++;
       render();
     }
@@ -442,6 +443,7 @@ document.addEventListener('click', async e => {
     case 'show-ob': ui.obStep = 0; S.savePrefs({ onboarded: false }); window.scrollTo(0, 0); return render();
     case 'goto-gemini': go('settings'); return $('#gemini')?.scrollIntoView({ behavior: 'smooth' });
     case 'scan-clear': Object.assign(ui.scan, { items: [], errors: [] }); return render();
+    case 'scan-retry': { const files = ui.scan.errors.map(e => e.file).filter(Boolean); if (files.length) runScan(files); return; }
     case 'scan-save': {
       const keep = ui.scan.items.filter(i => i.keep).map(({ keep, dup, old, fileName, ...t }) => t);
       const n = await S.saveMany(keep);
@@ -577,6 +579,7 @@ setModelChangeHandler(m => {
   const el = $('[data-input="gmodel"]'); if (el) el.value = m;
   toast(`เปลี่ยนเป็นโมเดล ${m} ให้อัตโนมัติ`);
 });
+setFallbackHandler(m => toast(`รุ่นหลักคนใช้เยอะ ใช้ ${m} แทนชั่วคราว`));
 S.subscribe(() => render());
 render();
 S.initStore();
