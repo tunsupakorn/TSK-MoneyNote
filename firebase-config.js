@@ -1,14 +1,10 @@
-// ใส่ค่า Firebase ของคุณที่นี่ เพื่อเปิดการซิงก์หลายเครื่อง (ดูขั้นตอนใน README.md)
+// ค่า Firebase ของโปรเจกต์ jukjik-0cc9 (ใช้ซิงก์หลายเครื่อง)
 // ค่าพวกนี้ไม่ใช่ความลับ — ความปลอดภัยมาจาก Firestore Rules (ไฟล์ firestore.rules)
-//
-// ตัวอย่าง:
-// export const firebaseConfig = {
-//   apiKey: "AIza...",
-//   authDomain: "jukjik-xxxx.firebaseapp.com",
-//   projectId: "jukjik-xxxx",
-//   storageBucket: "jukjik-xxxx.appspot.com",
-//   messagingSenderId: "1234567890",
-//   appId: "1:1234567890:web:abcdef"
-// };
-
-export const firebaseConfig = null;
+export const firebaseConfig = {
+  apiKey: "AIzaSyBzzbUzs4gzuuoH1cJqs1OkLS2t2ebDDuQ",
+  authDomain: "jukjik-0cc9.firebaseapp.com",
+  projectId: "jukjik-0cc9",
+  storageBucket: "jukjik-0cc9.firebasestorage.app",
+  messagingSenderId: "114129745621",
+  appId: "1:114129745621:web:f7f0c1c59c71aa13da945c"
+};
