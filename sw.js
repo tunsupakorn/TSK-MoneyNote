@@ -1,6 +1,6 @@
 // JukJik service worker: network-first for the app's own files, cache as offline fallback,
 // plus the Android share target ("Share → จุกจิก") for slip images and PDFs.
-const CACHE = 'jukjik-v15';
+const CACHE = 'jukjik-v16';
 const SHARE = 'jukjik-share';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'gemini.js', 'charts.js', 'sheets.js', 'qr.js', 'guide.html',
   'firebase-config.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
@@ -34,8 +34,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // Firebase/Gemini/Apps Script go straight to network
+  // 'no-cache' revalidates with the server, so a new version is picked up at once (not after the 10-min HTTP cache)
   e.respondWith(
-    fetch(e.request).then(res => {
+    fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return res;
