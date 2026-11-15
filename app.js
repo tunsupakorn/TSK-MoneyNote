@@ -159,7 +159,7 @@ function viewHome() {
     : `<section class="empty">
         <img src="icons/icon.svg" alt="" width="96" height="96">
         <h3>${q ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีรายการเดือนนี้'}</h3>
-        ${q ? '' : `<p>กด <b>+</b> เพื่อจดเอง หรือให้จุกจิกอ่านสลิปให้</p>
+        ${q ? '' : `<p>กดปุ่มเหลือง <b>🧾 อ่านสลิป</b> ตรงกลาง หรือ <b>✏️ จดเอง</b></p>
         <button class="btn primary" data-nav="scan">🧾 อ่านสลิป</button>`}
       </section>`}`;
 }
