@@ -58,6 +58,22 @@
 > ค่าใน firebase-config.js ไม่ใช่รหัสลับ เปิดเผยบน GitHub ได้ ความปลอดภัยมาจาก Rules ในข้อ 5
 > หมายเหตุ iPhone: ถ้า "เข้าสู่ระบบด้วย Google" ไม่ขึ้นตอนเปิดจากหน้าจอโฮม ให้ใช้อีเมล/รหัสผ่านแทน
 
+## ขั้นที่ 4 — Google Sheet (สำเนาข้อมูลไว้ดู, ไม่บังคับ)
+
+Firebase ยังเป็นที่เก็บหลัก ส่วน Google Sheet เป็นสำเนาที่อัปเดตอัตโนมัติ ไว้ดู ทำสูตร หรือทำกราฟ
+โค้ดสคริปต์อยู่ในโฟลเดอร์ `apps-script/`
+
+1. สร้าง Sheet และสคริปต์ด้วย [clasp](https://github.com/google/clasp):
+   `npx @google/clasp login` แล้ว `npx @google/clasp create-script --type sheets --title "จุกจิก JukJik" --rootDir apps-script`
+   (ถ้า clasp เขียนทับ `apps-script/appsscript.json` ให้คืนค่าไฟล์จาก git ก่อน)
+2. `npx @google/clasp push --force` แล้ว `npx @google/clasp create-deployment` จะได้ deployment id
+3. เปิดหน้าแก้ไขสคริปต์ เลือกฟังก์ชัน `setup` แล้วกด **เรียกใช้** จากนั้นกด **อนุญาต** สิทธิ์
+4. ลิงก์ web app คือ `https://script.google.com/macros/s/<deployment id>/exec` วางในแอปที่ **ตั้งค่า › 📗 Google Sheet** แล้วกด **เชื่อมต่อ**
+5. แก้โค้ดสคริปต์ภายหลัง: `clasp push --force` แล้ว `clasp update-deployment <deployment id>` (ลิงก์เดิมใช้ต่อได้)
+
+> ไม่ต้องเอาลิงก์ web app ไปไว้ใน GitHub แอปจะจับคู่กับสคริปต์ด้วยรหัสลับตอนกดเชื่อมต่อครั้งแรก
+> ถ้าต้องการจับคู่ใหม่ ให้รันฟังก์ชัน `resetPairing` ในหน้าแก้ไขสคริปต์
+
 ---
 
 ## ไฟล์ในโปรเจกต์
@@ -71,6 +87,8 @@
 | `store.js` | เก็บข้อมูลในเครื่อง / ซิงก์ Firebase |
 | `gemini.js` | ส่งสลิป/PDF ให้ Gemini อ่าน |
 | `charts.js` | กราฟรายวันและแยกหมวด |
+| `sheets.js` | ส่งสำเนาข้อมูลลง Google Sheet |
+| `apps-script/` | สคริปต์ฝั่ง Google Sheet (Apps Script) |
 | `firebase-config.js` | ค่า Firebase ของคุณ |
 | `firestore.rules` | กฎความปลอดภัยฐานข้อมูล |
 | `sw.js`, `manifest.webmanifest`, `icons/` | ทำให้ติดตั้งเป็นแอปและใช้ออฟไลน์ได้ |

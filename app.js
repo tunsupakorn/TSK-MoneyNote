@@ -1,6 +1,7 @@
 import * as S from './store.js';
 import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler, setFallbackHandler } from './gemini.js';
 import { categoryBars, dailyColumns, bindColumnTips } from './charts.js';
+import * as Sheet from './sheets.js';
 
 const { state, prefs } = S;
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -274,6 +275,8 @@ function viewSettings() {
       <button class="btn ghost sm" data-action="gtest">ทดสอบ key</button>
     </section>
 
+    ${sheetCard()}
+
     <section class="card"><h3>🎯 งบประมาณรายเดือน</h3>
       <div class="row gap"><input type="number" inputmode="decimal" placeholder="เช่น 15000" value="${state.settings.budget || ''}" data-input="budget">
       <button class="btn primary sm" data-action="budget-save">บันทึก</button></div>
@@ -314,6 +317,35 @@ function viewSettings() {
       <button class="link" data-action="show-ob">ดูหน้าแนะนำแอปอีกครั้ง</button>
     </section>
     <p class="center muted small pad">จุกจิก JukJik v1.0</p>`;
+}
+
+function sheetCard() {
+  if (!Sheet.isConnected()) {
+    return `<section class="card" id="gsheet"><h3>📗 Google Sheet</h3>
+      <p class="muted small">คัดลอกทุกรายการลง Google Sheet ของคุณอัตโนมัติ ไว้ดู ทำสูตร หรือทำกราฟ (ข้อมูลหลักยังอยู่ใน Firebase)</p>
+      <input type="url" placeholder="วางลิงก์ web app (https://script.google.com/macros/s/…/exec)" data-input="sheeturl" autocomplete="off">
+      <div class="row gap wrap" style="margin-top:10px">
+        <button class="btn primary sm" data-action="sheet-connect">เชื่อมต่อ</button>
+        <a class="link small" href="guide.html#sheet-setup">วิธีสร้างลิงก์ web app</a>
+      </div>
+      ${Sheet.sheet.status === 'error' ? `<p class="err">${esc(Sheet.sheet.msg)}</p>` : ''}
+    </section>`;
+  }
+  const s = Sheet.sheet;
+  const time = s.at ? new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit' }).format(s.at) : '';
+  const line = s.status === 'syncing' ? '⏳ กำลังส่งข้อมูลลงชีต…'
+    : s.status === 'ok' ? `✅ ซิงก์ลงชีตแล้ว ${time} น. · ${s.rows} รายการ`
+    : s.status === 'error' ? `⚠️ ${esc(s.msg)}`
+    : state.cloudConfigured && state.syncStatus !== 'synced' ? '⏸️ รอซิงก์กับบัญชีให้เสร็จก่อน แล้วจะส่งลงชีตให้'
+    : '🟢 เชื่อมต่อแล้ว ข้อมูลจะถูกส่งลงชีตอัตโนมัติเมื่อมีการเปลี่ยนแปลง';
+  return `<section class="card" id="gsheet"><h3>📗 Google Sheet</h3>
+    <p class="small ${s.status === 'error' ? 'err' : ''}">${line}</p>
+    <div class="row gap wrap">
+      ${Sheet.sheetUrl() ? `<a class="btn primary sm" href="${esc(Sheet.sheetUrl())}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}
+      <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
+      <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
+    </div>
+  </section>`;
 }
 
 // ---------- add / edit sheet ----------
@@ -480,6 +512,19 @@ document.addEventListener('click', async e => {
       toast('กำลังทดสอบ…');
       try { await testKey(prefs.geminiKey, prefs.geminiModel); toast('✅ key ใช้งานได้'); } catch (err) { toast('❌ ' + err.message); }
       return;
+    case 'sheet-connect': {
+      const url = $('[data-input="sheeturl"]').value;
+      el.disabled = true; el.textContent = 'กำลังเชื่อมต่อ…';
+      try { await Sheet.connect(url); toast('เชื่อม Google Sheet แล้ว 📗'); }
+      catch (err) { Sheet.sheet.status = 'error'; Sheet.sheet.msg = err.message; render(); }
+      return;
+    }
+    case 'sheet-sync':
+      if (state.cloudConfigured && state.syncStatus !== 'synced') return toast('รอซิงก์กับบัญชีให้เสร็จก่อน');
+      return Sheet.syncNow(true);
+    case 'sheet-disconnect':
+      if (confirm('ยกเลิกการเชื่อม Google Sheet? (ข้อมูลในชีตเดิมยังอยู่ แต่จะไม่อัปเดตอีก)')) { Sheet.disconnect(); toast('ยกเลิกการเชื่อมแล้ว'); }
+      return;
     case 'budget-save': S.saveSettings({ budget: Math.max(0, Number($('[data-input="budget"]').value) || 0) }); return toast('บันทึกงบแล้ว');
     case 'cat-del': {
       const id = el.dataset.id;
@@ -580,7 +625,8 @@ setModelChangeHandler(m => {
   toast(`เปลี่ยนเป็นโมเดล ${m} ให้อัตโนมัติ`);
 });
 setFallbackHandler(m => toast(`รุ่นหลักคนใช้เยอะ ใช้ ${m} แทนชั่วคราว`));
-S.subscribe(() => render());
+Sheet.onSheetChange(() => { if (ui.view === 'settings') render(); });
+S.subscribe(() => { render(); Sheet.schedule(); });
 render();
 S.initStore();
 if ('serviceWorker' in navigator && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(() => {});
