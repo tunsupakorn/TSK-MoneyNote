@@ -64,7 +64,55 @@ function doPost(e) {
       lock.releaseLock();
     }
   }
+  if (req.action === 'slip') {
+    try { return json(Object.assign({ ok: true }, saveSlip(req))); }
+    catch (err) { return json({ ok: false, error: 'drive: ' + String(err && err.message || err) }); }
+  }
   return json({ ok: false, error: 'unknown-action' });
+}
+
+// ---- เก็บรูปสลิปใน Google Drive: "จุกจิก JukJik — สลิป/2026-11/..." ----
+const SLIP_ROOT = 'จุกจิก JukJik — สลิป';
+
+// Built-in Drive service. The script only ever creates and writes inside the
+// "จุกจิก JukJik — สลิป" folder; folder ids are remembered in Script Properties.
+function storedFolder(key, create) {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty(key);
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
+  const f = create();
+  props.setProperty(key, f.getId());
+  return f;
+}
+function slipRoot() {
+  return storedFolder('SLIP_ROOT_ID', () => {
+    const it = DriveApp.getFoldersByName(SLIP_ROOT);
+    while (it.hasNext()) { const f = it.next(); if (!f.isTrashed()) return f; }
+    return DriveApp.createFolder(SLIP_ROOT);
+  });
+}
+function monthFolder(month) {
+  const root = slipRoot();
+  return storedFolder('SLIP_M_' + root.getId() + '_' + month, () => {
+    const it = root.getFoldersByName(month);
+    return it.hasNext() ? it.next() : root.createFolder(month);
+  });
+}
+
+function saveSlip(req) {
+  if (!req.data || !req.name) throw new Error('missing file');
+  const folder = monthFolder(/^\d{4}-\d{2}$/.test(req.month || '') ? req.month : 'อื่นๆ');
+  const name = String(req.name).replace(/[\/:*?"<>|]/g, '-').slice(0, 120);
+  const mime = /^(image\/(jpeg|png|webp|heic)|application\/pdf)$/.test(req.mime || '') ? req.mime : 'image/jpeg';
+  const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(req.data), mime, name));
+  if (req.desc) file.setDescription(String(req.desc).slice(0, 500));
+  return { id: file.getId(), url: file.getUrl(), folderUrl: slipRoot().getUrl() };
+}
+
+/** รันจากหน้าแก้ไขสคริปต์ เพื่ออนุญาตสิทธิ์ Google Drive (สร้างโฟลเดอร์สลิป) */
+function setupDrive() {
+  const root = slipRoot();
+  Logger.log('โฟลเดอร์สลิป: ' + root.getUrl());
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +167,8 @@ function writeAll(req) {
     .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
 
   // ---- รายการ ----
-  const HEAD = ['วันที่', 'เดือน', 'ประเภท', 'หมวด', 'จำนวนเงิน', 'ยอดสุทธิ', 'ช่องทาง', 'ผู้รับ/ร้าน', 'โน้ต', 'ที่มา', 'เลขอ้างอิง', 'เวลา', 'id'];
+  const HEAD = ['วันที่', 'เดือน', 'ประเภท', 'หมวด', 'จำนวนเงิน', 'ยอดสุทธิ', 'ช่องทาง', 'ผู้รับ/ร้าน', 'โน้ต', 'ที่มา', 'เลขอ้างอิง', 'เวลา', 'สลิป', 'id'];
+  const slipLink = u => /^https:\/\/drive\.google\.com\/[\w\/?=&.-]+$/.test(u || '') ? '=HYPERLINK("' + u + '","📎 ดูสลิป")' : '';
   const rows = tx.map(t => {
     const amt = Math.round((Number(t.amount) || 0) * 100) / 100;
     const inc = t.type === 'income', move = t.type === 'transfer';
@@ -127,13 +176,16 @@ function writeAll(req) {
     // noon, so the day can't shift across time zones
     return [new Date(p[0], p[1] - 1, p[2], 12), t.date.slice(0, 7), move ? 'ย้ายเงิน' : inc ? 'รายรับ' : 'รายจ่าย', safe(catName[t.cat] || t.cat || 'ไม่ระบุ'),
       amt, move ? 0 : inc ? amt : -amt, METHOD[t.method] || safe(t.method), safe(t.merchant), safe(t.note),
-      SOURCE[t.source] || safe(t.source), safe(t.ref), safe(t.time), safe(t.id)];
+      SOURCE[t.source] || safe(t.source), safe(t.ref), safe(t.time), slipLink(t.slipUrl), safe(t.id)];
   });
   const sh = getSheet(SHEET_TX);
   sh.clear();
   ensureSize(sh, rows.length + 1, HEAD.length);
   sh.getRange(1, 2, Math.max(rows.length + 1, 2), 1).setNumberFormat('@');           // เดือน เป็นข้อความ
-  sh.getRange(1, 11, Math.max(rows.length + 1, 2), 3).setNumberFormat('@');          // อ้างอิง เวลา id
+  sh.showColumns(1, HEAD.length);
+  sh.getRange(1, 11, Math.max(rows.length + 1, 2), 2).setNumberFormat('@');          // อ้างอิง เวลา
+  sh.getRange(1, 13, Math.max(rows.length + 1, 2), 1).setNumberFormat('General');    // ลิงก์สลิป (สูตร)
+  sh.getRange(1, 14, Math.max(rows.length + 1, 2), 1).setNumberFormat('@');          // id
   sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]);
   if (rows.length) {
     sh.getRange(2, 1, rows.length, HEAD.length).setValues(rows);
@@ -142,7 +194,7 @@ function writeAll(req) {
     sh.getRange(2, 6, rows.length, 1).setNumberFormat('[Color10]+#,##0.00;[Red]-#,##0.00;0.00');
   }
   styleHeader(sh, HEAD.length);
-  sh.hideColumns(13);
+  sh.hideColumns(14);
 
   // ---- สรุปรายเดือน ----
   const byMonth = {};

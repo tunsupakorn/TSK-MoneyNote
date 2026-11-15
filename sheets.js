@@ -11,6 +11,41 @@ export function onSheetChange(fn) { notify = fn; }
 const cfg = () => state.settings.sheet || null;
 export const isConnected = () => !!cfg()?.webapp;
 export const sheetUrl = () => cfg()?.sheetUrl || '';
+export const slipFolderUrl = () => cfg()?.slipFolderUrl || '';
+export const saveSlipsOn = () => isConnected() && state.settings.saveSlips !== false;
+
+// ---- slip images → Google Drive (via the same Apps Script) ----
+function blobToBase64(blob) {
+  return new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => bad(r.error); r.readAsDataURL(blob); });
+}
+async function shrink(file) {
+  if (!/^image\//.test(file.type)) return { blob: file, mime: file.type || 'application/pdf' };
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return { blob: await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85)), mime: 'image/jpeg' };
+  } catch { return { blob: file, mime: file.type || 'image/jpeg' }; }
+}
+const TYPE_TH = { expense: 'รายจ่าย', income: 'รายรับ', transfer: 'ย้ายเงิน' };
+
+export async function uploadSlip(file, tx, catName = '') {
+  const c = cfg();
+  if (!c?.webapp) throw new Error('ยังไม่ได้เชื่อม Google Sheet');
+  if (file.size > 15 * 1024 * 1024) throw new Error('ไฟล์ใหญ่เกิน 15MB');
+  const { blob, mime } = await shrink(file);
+  const ext = mime === 'application/pdf' ? 'pdf' : 'jpg';
+  const name = `${tx.date} ${(tx.time || '').replace(':', '')} ${TYPE_TH[tx.type] || ''} ${Number(tx.amount).toFixed(2)} ${tx.merchant || catName}`
+    .replace(/\s+/g, ' ').trim() + '.' + ext;
+  const r = await post(c.webapp, {
+    action: 'slip', token: c.token, month: tx.date.slice(0, 7), name, mime, data: await blobToBase64(blob),
+    desc: [TYPE_TH[tx.type], catName, tx.note, tx.ref && `อ้างอิง ${tx.ref}`].filter(Boolean).join(' · '),
+  });
+  if (r.folderUrl && r.folderUrl !== c.slipFolderUrl) S.saveSettings({ sheet: { ...cfg(), slipFolderUrl: r.folderUrl } });
+  return { id: r.id, url: r.url };
+}
 
 const ERR = {
   'already-paired': 'สคริปต์นี้จับคู่กับแอปอื่นไว้แล้ว ให้รัน resetPairing ในหน้าแก้ไขสคริปต์ก่อน แล้วเชื่อมใหม่',
@@ -103,7 +138,7 @@ export async function syncNow(force = false) {
   notify();
   try {
     const tx = state.tx.map(t => ({ id: t.id, date: t.date, time: t.time || '', type: t.type, amount: t.amount, cat: t.cat,
-      method: t.method || '', merchant: t.merchant || '', note: t.note || '', source: t.source || '', ref: t.ref || '' }));
+      method: t.method || '', merchant: t.merchant || '', note: t.note || '', source: t.source || '', ref: t.ref || '', slipUrl: t.slipUrl || '' }));
     const r = await post(c.webapp, { action: 'sync', token: c.token, tx, categories: state.settings.categories, device: deviceLabel() });
     LS.set('jj_sheet_sig', sig);
     LS.set('jj_sheet_rows', r.rows || 0);

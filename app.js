@@ -22,6 +22,8 @@ const ui = {
   statsType: 'expense',
   search: '',
   scan: { busy: false, done: 0, total: 0, items: [], errors: [], skipped: [], only30: true },
+  tray: [],        // picked files waiting to be read: { file, url }
+  slipNote: '',
   authMode: 'signin',
   authBusy: false,
   authError: '',
@@ -29,7 +31,9 @@ const ui = {
 };
 
 const cats = () => state.settings.categories || S.DEFAULT_CATEGORIES;
-const TRANSFER_CAT = { id: 'transfer', name: 'ย้ายเงิน', emoji: '🔄', type: 'transfer' };
+// Gemini key: this device first, else the one synced with your account (enter once, every device gets it)
+const geminiKey = () => prefs.geminiKey || state.settings.geminiKey || '';
+const TRANSFER_CAT ={ id: 'transfer', name: 'ย้ายเงิน', emoji: '🔄', type: 'transfer' };
 const catById = id => id === 'transfer' ? TRANSFER_CAT : cats().find(c => c.id === id) || { id, name: 'ไม่ระบุ', emoji: '❔', type: 'expense' };
 const SIGN = { expense: '−', income: '+', transfer: '↔ ' };
 const EMOJIS = ['🍜', '🍱', '🧋', '☕', '🍺', '🛒', '🛍️', '👕', '💄', '🚕', '🚗', '⛽', '🏍️', '🚇', '✈️', '🏠', '⚡', '🚰', '🌐', '📱', '🧾', '💊', '🏥', '🐶', '👶', '🎮', '🎬', '🎵', '📚', '🎓', '🏋️', '💇', '🎁', '❤️', '🙏', '💼', '🏪', '📈', '💰', '🔁', '🏦', '💳', '🧴', '🧹', '🔧', '📦'];
@@ -76,7 +80,7 @@ function txRow(t) {
   return `<li><button class="tx" data-action="edit" data-id="${esc(t.id)}">
     <span class="bubble" aria-hidden="true">${c.emoji}</span>
     <span class="tx-main"><b>${esc(c.name)}</b><small>${esc(sub || METHODS[t.method] || '')}</small></span>
-    <span class="tx-amt num ${t.type}">${SIGN[t.type] || ''}${baht(t.amount)}</span>
+    <span class="tx-amt num ${t.type}">${t.slipUrl ? '<i class="clip" title="มีสลิปใน Drive">📎</i>' : ''}${SIGN[t.type] || ''}${baht(t.amount)}</span>
   </button></li>`;
 }
 
@@ -195,17 +199,35 @@ function viewStats() {
 
 function viewScan() {
   const sc = ui.scan;
-  const hasKey = !!prefs.geminiKey;
+  const hasKey = !!geminiKey();
   const selected = sc.items.filter(i => i.keep).length;
+  const off = sc.busy || !hasKey ? 'disabled' : '';
+  const tray = ui.tray;
   return `${header('อ่านสลิป')}
     ${!hasKey ? `<section class="card notice"><p>🔑 ต้องใส่ Gemini API key ก่อน (ฟรี) เพื่อให้จุกจิกอ่านสลิปได้</p>
       <button class="btn primary sm" data-action="goto-gemini">ไปใส่ key</button></section>` : ''}
-    <label class="drop ${sc.busy || !hasKey ? 'disabled' : ''}">
-      <input type="file" accept="image/*,application/pdf" multiple data-input="files" ${sc.busy || !hasKey ? 'disabled' : ''}>
-      <span class="drop-icon">🧾</span>
-      <b>เลือกสลิป หรือใบแจ้งยอดบัตรเครดิต</b>
-      <small>เลือกได้หลายรูปพร้อมกัน · รองรับสลิปทุกธนาคาร · PDF ใบแจ้งยอด</small>
-    </label>
+    <section class="pick ${off}" data-drop>
+      <label class="pick-main">
+        <input type="file" accept="image/*" multiple data-input="pick" ${off}>
+        <span class="pick-icon">🖼️</span>
+        <span><b>เลือกรูปสลิป</b><small>เปิดแกลเลอรี แตะเลือกได้หลายรูป</small></span>
+      </label>
+      <div class="pick-row">
+        <label class="pick-btn"><input type="file" accept="image/*" capture="environment" data-input="pick" ${off}>📸<span>ถ่ายรูป</span></label>
+        <label class="pick-btn"><input type="file" accept="application/pdf,.pdf" multiple data-input="pick" ${off}>📄<span>ใบแจ้งยอด PDF</span></label>
+        <button class="pick-btn" data-action="paste-img" ${off}>📋<span>วางรูป</span></button>
+      </div>
+      <small class="pick-hint">💡 ${/Android/.test(navigator.userAgent) ? 'แชร์รูปจากแกลเลอรี / LINE / แอปธนาคาร มาที่ “จุกจิก” ได้เลย (ติดตั้งแอปบนหน้าจอหลักก่อน)' : 'ลากรูปมาวาง หรือกด Ctrl+V เพื่อวางรูปได้เลย'}</small>
+    </section>
+    ${tray.length ? `<section class="tray">
+      <div class="row between"><b>เลือกไว้ ${tray.length} ไฟล์</b><button class="link small" data-action="tray-clear">ล้าง</button></div>
+      <div class="tray-grid">${tray.map((t, i) => `<figure>
+        ${t.url ? `<img src="${t.url}" alt="">` : `<div class="tray-pdf">📄<small>${esc(t.file.name)}</small></div>`}
+        <button class="tray-x" data-action="tray-remove" data-i="${i}" aria-label="เอาออก">×</button></figure>`).join('')}
+        <label class="tray-add"><input type="file" accept="image/*" multiple data-input="pick">＋</label></div>
+      <button class="btn primary big sticky" data-action="tray-read" ${off}>🐣 อ่าน ${tray.length} ${tray.length > 1 ? 'ไฟล์' : 'สลิป'}</button>
+    </section>` : ''}
+    ${ui.slipNote ? `<p class="muted small center" id="slip-note">${esc(ui.slipNote)}</p>` : ''}
     <label class="check"><input type="checkbox" data-input="only30" ${sc.only30 ? 'checked' : ''}> เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</label>
     ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>จุกจิกกำลังอ่าน… ${sc.done}/${sc.total}</p>
       <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div>
@@ -281,15 +303,7 @@ function viewSettings() {
   return `${header('ตั้งค่า')}
     <section class="card"><h3>🔄 บัญชีและการซิงก์</h3>${account}</section>
 
-    <section class="card" id="gemini"><h3>🔑 Gemini (อ่านสลิป)</h3>
-      <p class="muted small">สร้าง API key ฟรีที่ aistudio.google.com/apikey · key เก็บไว้ในเครื่องนี้เท่านั้น ใส่ทีละเครื่อง</p>
-      <input type="password" placeholder="วาง API key ที่นี่" value="${esc(prefs.geminiKey)}" data-input="gkey" autocomplete="off">
-      <label class="lbl">โมเดล<input type="text" value="${esc(prefs.geminiModel)}" data-input="gmodel"></label>
-      <button class="btn ghost sm" data-action="gtest">ทดสอบ key</button>
-      <label class="lbl">ชื่อ-นามสกุลของคุณ ตามบัญชีธนาคาร (ใช้แยก "ย้ายเงิน" ระหว่างบัญชีตัวเอง)
-        <input type="text" placeholder="เช่น ศุภกร นิตยวรรณ, Supakorn Nittayawan" value="${esc(state.settings.ownerNames || '')}" data-input="owner"></label>
-      <button class="btn ghost sm" data-action="owner-save">บันทึกชื่อ</button>
-    </section>
+    ${geminiCard()}
 
     ${sheetCard()}
 
@@ -333,6 +347,54 @@ function viewSettings() {
     <p class="center muted small pad">จุกจิก JukJik v1.0</p>`;
 }
 
+function geminiCard() {
+  const key = geminiKey();
+  const synced = state.mode === 'cloud' && state.settings.geminiKey;
+  const more = `<details class="more"><summary>ตั้งค่าเพิ่มเติม</summary>
+      <label class="lbl">โมเดล<input type="text" value="${esc(prefs.geminiModel)}" data-input="gmodel"></label>
+      <label class="lbl">ชื่อ-นามสกุลของคุณ ตามบัญชีธนาคาร (แอปจำจากสลิปให้เองได้)
+        <input type="text" placeholder="เช่น ศุภกร นิตยวรรณ, Supakorn Nittayawan" value="${esc(state.settings.ownerNames || '')}" data-input="owner"></label>
+      <div class="row gap wrap"><button class="btn ghost sm" data-action="owner-save">บันทึกชื่อ</button>
+        ${key ? `<button class="btn ghost sm" data-action="gtest">ทดสอบ key</button><button class="btn ghost sm" data-action="gkey-change">เปลี่ยน key</button>` : ''}</div>
+    </details>`;
+  if (key && !ui.editKey) {
+    return `<section class="card compact" id="gemini">
+      <div class="row between"><h3>🔑 อ่านสลิป</h3><span class="ok-pill">✅ พร้อมใช้</span></div>
+      <p class="muted small">${esc(prefs.geminiModel)} · ${synced ? 'key ซิงก์กับทุกเครื่องในบัญชีนี้แล้ว' : state.mode === 'cloud' ? 'key อยู่ในเครื่องนี้' : 'key อยู่ในเครื่องนี้ (ล็อกอินเพื่อใช้กับทุกเครื่อง)'}
+        ${state.settings.ownerNames ? ` · ชื่อ: ${esc(state.settings.ownerNames)}` : ''}</p>
+      ${more}
+    </section>`;
+  }
+  return `<section class="card" id="gemini"><h3>🔑 ตั้งค่าอ่านสลิป (ทำครั้งเดียว)</h3>
+    <ol class="steps">
+      <li><a class="btn ghost sm" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">① เปิดหน้าสร้าง key ฟรี ↗</a>
+        <small class="muted">กด “Create API key” แล้วกดคัดลอก</small></li>
+      <li><button class="btn primary sm" data-action="gkey-paste">② 📋 วาง key จากคลิปบอร์ด</button>
+        <small class="muted">แอปจะทดสอบให้เอง แล้วใช้กับทุกเครื่องที่ล็อกอินบัญชีนี้</small></li>
+    </ol>
+    <div class="row gap"><input type="password" class="grow" placeholder="หรือวาง key ที่นี่ (AIza…)" data-input="gkey" autocomplete="off">
+      <button class="btn ghost sm" data-action="gkey-save">บันทึก</button></div>
+    ${ui.keyMsg ? `<p class="small ${ui.keyMsg.startsWith('❌') ? 'err' : ''}">${esc(ui.keyMsg)}</p>` : ''}
+    ${ui.editKey ? `<button class="link small" data-action="gkey-cancel">ยกเลิก</button>` : ''}
+    ${more}
+  </section>`;
+}
+
+async function saveGeminiKey(raw) {
+  const key = String(raw || '').trim().replace(/\s+/g, '');
+  if (!key) { ui.keyMsg = '❌ ไม่พบ key'; return render(); }
+  if (!/^AIza[\w-]{20,}$/.test(key)) { ui.keyMsg = '❌ ดูไม่เหมือน Gemini API key (ควรขึ้นต้นด้วย AIza)'; return render(); }
+  ui.keyMsg = '⏳ กำลังทดสอบ key…'; render();
+  try {
+    await testKey(key, prefs.geminiModel);
+  } catch (e) { ui.keyMsg = '❌ ' + e.message; return render(); }
+  S.savePrefs({ geminiKey: key });
+  if (state.mode === 'cloud') S.saveSettings({ geminiKey: key });
+  ui.keyMsg = ''; ui.editKey = false;
+  toast(state.mode === 'cloud' ? '✅ key ใช้งานได้ และใช้กับทุกเครื่องแล้ว' : '✅ key ใช้งานได้');
+  render();
+}
+
 function sheetCard() {
   if (!Sheet.isConnected()) {
     return `<section class="card" id="gsheet"><h3>📗 Google Sheet</h3>
@@ -352,13 +414,21 @@ function sheetCard() {
     : s.status === 'error' ? `⚠️ ${esc(s.msg)}`
     : state.cloudConfigured && state.syncStatus !== 'synced' ? '⏸️ รอซิงก์กับบัญชีให้เสร็จก่อน แล้วจะส่งลงชีตให้'
     : '🟢 เชื่อมต่อแล้ว ข้อมูลจะถูกส่งลงชีตอัตโนมัติเมื่อมีการเปลี่ยนแปลง';
-  return `<section class="card" id="gsheet"><h3>📗 Google Sheet</h3>
-    <p class="small ${s.status === 'error' ? 'err' : ''}">${line}</p>
+  const slips = state.settings.saveSlips !== false;
+  return `<section class="card compact" id="gsheet">
+    <div class="row between"><h3>📗 Google Sheet & Drive</h3>${s.status === 'error' ? '<span class="tag warn">มีปัญหา</span>' : '<span class="ok-pill">✅ เชื่อมแล้ว</span>'}</div>
+    <p class="small ${s.status === 'error' ? 'err' : 'muted'}">${line}${slips ? ' · เก็บสลิปใน Drive' : ''}</p>
     <div class="row gap wrap">
-      ${Sheet.sheetUrl() ? `<a class="btn primary sm" href="${esc(Sheet.sheetUrl())}" target="_blank" rel="noopener">เปิด Google Sheet</a>` : ''}
-      <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
-      <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
+      ${Sheet.sheetUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.sheetUrl())}" target="_blank" rel="noopener">📗 เปิดชีต</a>` : ''}
+      ${Sheet.slipFolderUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.slipFolderUrl())}" target="_blank" rel="noopener">📁 โฟลเดอร์สลิป</a>` : ''}
     </div>
+    <details class="more"><summary>ตั้งค่าเพิ่มเติม</summary>
+      <label class="check"><input type="checkbox" data-input="saveslips" ${slips ? 'checked' : ''}> เก็บรูปสลิปไว้ใน Google Drive (โฟลเดอร์ “จุกจิก JukJik — สลิป” แยกตามเดือน)</label>
+      <div class="row gap wrap">
+        <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
+        <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
+      </div>
+    </details>
   </section>`;
 }
 
@@ -450,6 +520,7 @@ function renderSheet() {
     </div>
     <label class="lbl">โน้ต<input type="text" value="${esc(d.note || '')}" placeholder="เช่น ข้าวมันไก่ร้านประจำ" data-d="note"></label>
     ${d.merchant ? `<small class="muted">ผู้รับ: ${esc(d.merchant)}${d.ref ? ' · อ้างอิง ' + esc(d.ref) : ''}</small>` : ''}
+    ${/^https:\/\/drive\.google\.com\//.test(d.slipUrl || '') ? `<a class="btn ghost sm" href="${esc(d.slipUrl)}" target="_blank" rel="noopener">📎 ดูสลิปใน Google Drive</a>` : ''}
     <div class="row gap">
       ${d.id ? `<button type="button" class="btn danger" data-action="d-delete">ลบ</button>` : ''}
       <button type="submit" class="btn primary big grow">บันทึก</button>
@@ -462,6 +533,96 @@ function isDup(it, existing) {
   return existing.some(t => (it.qrRef && t.qrRef === it.qrRef) || (it.ref && t.ref && t.ref === it.ref) ||
     (t.date === it.date && Number(t.amount) === Number(it.amount) && t.type === it.type && (t.merchant || '') === (it.merchant || '') && (t.time || '') === (it.time || '')));
 }
+// ---------- picking slips: tray with thumbnails ----------
+const OK_FILE = f => /^image\//.test(f.type) || f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+function addToTray(files) {
+  const add = [...files].filter(OK_FILE)
+    .filter(f => !ui.tray.some(t => t.file.name === f.name && t.file.size === f.size && t.file.lastModified === f.lastModified));
+  if (!add.length) { if (files.length) toast('รองรับเฉพาะรูปภาพและ PDF'); return; }
+  ui.tray.push(...add.map(file => ({ file, url: /^image\//.test(file.type) ? URL.createObjectURL(file) : '' })));
+  if (ui.view !== 'scan') ui.view = 'scan';
+  render();
+}
+function clearTray(keep = []) {
+  ui.tray.forEach(t => { if (!keep.includes(t) && t.url) URL.revokeObjectURL(t.url); });
+  ui.tray = keep;
+}
+async function pasteFromClipboard() {
+  try {
+    const items = await navigator.clipboard.read();
+    const files = [];
+    for (const it of items) {
+      const type = it.types.find(t => /^image\//.test(t));
+      if (type) { const b = await it.getType(type); files.push(new File([b], `วาง-${Date.now()}.${type.split('/')[1]}`, { type })); }
+    }
+    files.length ? addToTray(files) : toast('ไม่มีรูปในคลิปบอร์ด');
+  } catch { toast('วางรูปไม่ได้ ลองกดค้างในช่องแล้วเลือก “วาง” หรือใช้ปุ่มเลือกรูป'); }
+}
+document.addEventListener('paste', e => {
+  if (ui.view !== 'scan' || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length) { e.preventDefault(); addToTray(files); }
+});
+document.addEventListener('dragover', e => { if (e.target.closest?.('[data-drop]')) { e.preventDefault(); e.target.closest('[data-drop]').classList.add('over'); } });
+document.addEventListener('dragleave', e => e.target.closest?.('[data-drop]')?.classList.remove('over'));
+document.addEventListener('drop', e => {
+  const zone = e.target.closest?.('[data-drop]');
+  if (!zone) return;
+  e.preventDefault(); zone.classList.remove('over');
+  addToTray(e.dataTransfer?.files || []);
+});
+
+// Files shared to the app (Android share sheet → "จุกจิก"): the service worker parks them in a cache.
+async function takeSharedFiles() {
+  if (!new URLSearchParams(location.search).has('shared')) return;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const cache = await caches.open('jukjik-share');
+    const keys = await cache.keys();
+    const files = [];
+    for (const req of keys) {
+      const res = await cache.match(req);
+      const blob = await res.blob();
+      const name = decodeURIComponent(res.headers.get('x-name') || 'slip.jpg');
+      files.push(new File([blob], name, { type: blob.type || res.headers.get('content-type') || 'image/jpeg' }));
+      await cache.delete(req);
+    }
+    if (files.length) { ui.view = 'scan'; addToTray(files); toast(`รับ ${files.length} ไฟล์จากการแชร์แล้ว`); }
+  } catch (e) { console.warn('share', e); }
+}
+
+// Upload saved slips to Google Drive in the background, then link each entry to its file.
+let slipQueue = Promise.resolve();
+function uploadSlips(pairs) {
+  if (!pairs.length) return;
+  slipQueue = slipQueue.then(async () => {
+    let ok = 0, fail = 0;
+    for (const { tx, file } of pairs) {
+      try {
+        const r = await Sheet.uploadSlip(file, tx, catById(tx.cat).name);
+        const cur = state.tx.find(t => t.id === tx.id) || tx;
+        S.saveTx({ ...cur, slipUrl: r.url, slipId: r.id });
+        ok++;
+      } catch (e) { fail++; console.warn('slip upload', e); ui.slipError = e.message; }
+      ui.slipNote = `กำลังเก็บสลิปเข้า Google Drive ${ok + fail}/${pairs.length}`;
+      if (ui.view === 'scan') { const el = $('#slip-note'); if (el) el.textContent = ui.slipNote; }
+    }
+    ui.slipNote = '';
+    toast(fail ? `เก็บสลิปเข้า Drive ได้ ${ok}/${pairs.length} (${ui.slipError})` : `📁 เก็บสลิปเข้า Google Drive แล้ว ${ok} รูป`);
+    if (ui.view === 'scan') render();
+  });
+}
+
+// When a slip shows a transfer between your own accounts with an unmasked name, remember that name.
+function learnOwnerName(list) {
+  if (String(state.settings.ownerNames || '').trim()) return;
+  const t = list.find(x => x.type === 'transfer' && x.merchant && !/[*xX]{2,}/.test(x.merchant) && /\s/.test(x.merchant.trim()));
+  if (!t) return;
+  const name = t.merchant.replace(/^(นาย|นางสาว|นาง|น\.ส\.)\s*/, '').trim();
+  S.saveSettings({ ownerNames: name });
+  toast(`จำชื่อของคุณแล้ว: ${name}`);
+}
+
 const scanNote = () => `${ui.scan.note || 'ปกติใช้เวลา 5–20 วินาทีต่อใบ'} · ${Math.round((Date.now() - (ui.scan.started || Date.now())) / 1000)} วินาที`;
 
 async function runScan(files) {
@@ -473,7 +634,7 @@ async function runScan(files) {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
   const cutISO = new Date(cutoff - cutoff.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const queue = [...files];
-  const opts = { key: prefs.geminiKey, model: prefs.geminiModel, categories: cats(), today: todayISO(), ownerNames: ownerNames() };
+  const opts = { key: geminiKey(), model: prefs.geminiModel, categories: cats(), today: todayISO(), ownerNames: ownerNames() };
   const seenQR = new Set(sc.items.map(i => i.qrRef).filter(Boolean));
   const worker = async () => {
     while (queue.length) {
@@ -490,6 +651,7 @@ async function runScan(files) {
         const found = await readFile(f, opts);
         if (!found.length) sc.errors.push({ name: f.name, msg: 'ไม่พบรายการเงินในไฟล์นี้', file: f });
         if (qr && found[0]) Object.assign(found[0], { qrRef: qr.key, ref: found[0].ref || qr.ref });
+        if (found[0]) found[0].file = f; // the slip image goes to Drive with its main entry
         found.forEach(t => {
           const it = { ...t, fileName: f.name };
           it.dup = isDup(it, state.tx) || isDup(it, sc.items);
@@ -565,14 +727,22 @@ document.addEventListener('click', async e => {
     case 'goto-gemini': go('settings'); return $('#gemini')?.scrollIntoView({ behavior: 'smooth' });
     case 'scan-clear': Object.assign(ui.scan, { items: [], errors: [], skipped: [] }); return render();
     case 'scan-cancel': ui.scan.cancel = true; cancelAll(); return render();
+    case 'tray-read': { const files = ui.tray.map(t => t.file); clearTray(); if (files.length) runScan(files); return; }
+    case 'tray-remove': { const t = ui.tray.splice(Number(el.dataset.i), 1)[0]; if (t?.url) URL.revokeObjectURL(t.url); return render(); }
+    case 'tray-clear': clearTray(); return render();
+    case 'paste-img': return pasteFromClipboard();
     case 'scan-retry': { const files = ui.scan.errors.map(e => e.file).filter(Boolean); if (files.length) runScan(files); return; }
     case 'scan-save': {
-      const keep = ui.scan.items.filter(i => i.keep).map(({ keep, dup, old, fileName, ...t }) => t);
-      const n = await S.saveMany(keep);
+      const chosen = ui.scan.items.filter(i => i.keep);
+      const pairs = chosen.map(({ keep, dup, old, fileName, file, ...t }) => ({ tx: { ...t, id: t.id || S.newId() }, file }));
+      const n = await S.saveMany(pairs.map(p => p.tx));
       ui.scan.items = ui.scan.items.filter(i => !i.keep);
       toast(`บันทึก ${n} รายการแล้ว 🐣`);
-      if (keep[0]) ui.month = keep[0].date.slice(0, 7);
-      return render();
+      if (pairs[0]) ui.month = pairs[0].tx.date.slice(0, 7);
+      learnOwnerName(pairs.map(p => p.tx));
+      render();
+      if (Sheet.saveSlipsOn()) uploadSlips(pairs.filter(p => p.file));
+      return;
     }
     case 'upload-local': { const n = await S.uploadLocalToCloud(); return toast(`อัปขึ้นบัญชีแล้ว ${n} รายการ`); }
     case 'discard-local': if (confirm('ไม่อัปข้อมูลในเครื่องนี้? (ข้อมูลในเครื่องจะถูกลบ)')) S.discardLocalPending(); return;
@@ -598,10 +768,18 @@ document.addEventListener('click', async e => {
       return;
     }
     case 'gtest':
-      if (!prefs.geminiKey) return toast('ใส่ key ก่อน');
+      if (!geminiKey()) return toast('ใส่ key ก่อน');
       toast('กำลังทดสอบ…');
-      try { await testKey(prefs.geminiKey, prefs.geminiModel); toast('✅ key ใช้งานได้'); } catch (err) { toast('❌ ' + err.message); }
+      try { await testKey(geminiKey(), prefs.geminiModel); toast('✅ key ใช้งานได้'); } catch (err) { toast('❌ ' + err.message); }
       return;
+    case 'gkey-paste': {
+      let text = '';
+      try { text = await navigator.clipboard.readText(); } catch { ui.keyMsg = '❌ อ่านคลิปบอร์ดไม่ได้ วาง key ในช่องด้านล่างแทน'; return render(); }
+      return saveGeminiKey(text);
+    }
+    case 'gkey-save': return saveGeminiKey($('[data-input="gkey"]')?.value);
+    case 'gkey-change': ui.editKey = true; ui.keyMsg = ''; return render();
+    case 'gkey-cancel': ui.editKey = false; ui.keyMsg = ''; return render();
     case 'sheet-connect': {
       const url = $('[data-input="sheeturl"]').value;
       el.disabled = true; el.textContent = 'กำลังเชื่อมต่อ…';
@@ -688,7 +866,11 @@ document.addEventListener('input', e => {
   }
   switch (t.dataset.input) {
     case 'search': ui.search = t.value; return render();
-    case 'gkey': return S.savePrefs({ geminiKey: t.value.trim() });
+    case 'gkey': {
+      const v = t.value.trim();
+      if (/^AIza[\w-]{30,}$/.test(v)) saveGeminiKey(v); // pasted a full key: test & save right away
+      return;
+    }
     case 'gmodel': return S.savePrefs({ geminiModel: t.value.trim() || DEFAULT_MODEL });
   }
 });
@@ -696,11 +878,13 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   switch (t.dataset.input) {
+    case 'saveslips': S.saveSettings({ saveSlips: t.checked }); return toast(t.checked ? 'จะเก็บสลิปไว้ใน Google Drive' : 'ปิดการเก็บสลิปแล้ว');
     case 'only30':
       ui.scan.only30 = t.checked;
       ui.scan.items.forEach(it => { if (!it.dup) it.keep = !(t.checked && it.old); });
       return render();
     case 'files': { const files = [...t.files]; t.value = ''; if (files.length) runScan(files); return; }
+    case 'pick': { const files = [...t.files]; t.value = ''; addToTray(files); return; }
     case 'import': {
       const file = t.files[0]; t.value = '';
       if (!file) return;
@@ -729,7 +913,12 @@ setModelChangeHandler(m => {
 setFallbackHandler(m => toast(`รุ่นหลักคนใช้เยอะ ใช้ ${m} แทนชั่วคราว`));
 setStatusHandler(msg => { ui.scan.note = msg; if (ui.view === 'scan') render(); });
 Sheet.onSheetChange(() => { if (ui.view === 'settings') render(); });
-S.subscribe(() => { render(); Sheet.schedule(); });
+S.subscribe(() => {
+  // a key saved only on this device (older version) is shared to the account once it is synced
+  if (prefs.geminiKey && state.mode === 'cloud' && state.syncStatus === 'synced' && !state.settings.geminiKey) S.saveSettings({ geminiKey: prefs.geminiKey });
+  render(); Sheet.schedule();
+});
 render();
 S.initStore();
+takeSharedFiles();
 if ('serviceWorker' in navigator && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(() => {});
