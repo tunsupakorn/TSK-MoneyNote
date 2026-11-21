@@ -23,7 +23,6 @@ const ui = {
   search: '',
   scan: { busy: false, done: 0, total: 0, items: [], errors: [], skipped: [], only30: true },
   tray: [],        // picked files waiting to be read: { file, url }
-  slipNote: '',
   authMode: 'signin',
   authBusy: false,
   authError: '',
@@ -227,7 +226,6 @@ function viewScan() {
         <label class="tray-add"><input type="file" accept="image/*" multiple data-input="pick">＋</label></div>
       <button class="btn primary big sticky" data-action="tray-read" ${off}>🐣 อ่าน ${tray.length} ${tray.length > 1 ? 'ไฟล์' : 'สลิป'}</button>
     </section>` : ''}
-    ${ui.slipNote ? `<p class="muted small center" id="slip-note">${esc(ui.slipNote)}</p>` : ''}
     <label class="check"><input type="checkbox" data-input="only30" ${sc.only30 ? 'checked' : ''}> เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</label>
     ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>TSK-MoneyNote กำลังอ่าน… ${sc.done}/${sc.total}</p>
       <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div>
@@ -471,8 +469,8 @@ async function saveGeminiKey(raw) {
 
 function sheetCard() {
   if (!Sheet.isConnected()) {
-    return `<section class="card" id="gsheet"><h3>📗 Google Sheet & Drive <small class="muted">(ไม่บังคับ)</small></h3>
-      <p class="muted small">เก็บสำเนาทุกรายการไว้ใน Google Sheet และรูปสลิปไว้ใน Google Drive ของคุณเอง</p>
+    return `<section class="card" id="gsheet"><h3>📗 Google Sheet <small class="muted">(ไม่บังคับ)</small></h3>
+      <p class="muted small">เก็บสำเนาทุกรายการไว้ใน Google Sheet ของคุณเอง</p>
       ${state.mode !== 'cloud' ? '<p class="small">🔐 ล็อกอินบัญชีก่อน แล้วค่อยเชื่อมชีต</p>' : ''}
       <ol class="steps">
         <li><a class="btn primary sm" href="${TEMPLATE_URL}" target="_blank" rel="noopener">① 📗 สร้างชีตของฉัน (กด “ทำสำเนา”) ↗</a></li>
@@ -494,16 +492,13 @@ function sheetCard() {
     : s.status === 'error' ? `⚠️ ${esc(s.msg)}`
     : state.cloudConfigured && state.syncStatus !== 'synced' ? '⏸️ รอซิงก์กับบัญชีให้เสร็จก่อน แล้วจะส่งลงชีตให้'
     : '🟢 เชื่อมต่อแล้ว ข้อมูลจะถูกส่งลงชีตอัตโนมัติเมื่อมีการเปลี่ยนแปลง';
-  const slips = state.settings.saveSlips !== false;
   return `<section class="card compact" id="gsheet">
-    <div class="row between"><h3>📗 Google Sheet & Drive</h3>${s.status === 'error' ? '<span class="tag warn">มีปัญหา</span>' : '<span class="ok-pill">✅ เชื่อมแล้ว</span>'}</div>
-    <p class="small ${s.status === 'error' ? 'err' : 'muted'}">${line}${slips ? ' · เก็บสลิปใน Drive' : ''}</p>
+    <div class="row between"><h3>📗 Google Sheet</h3>${s.status === 'error' ? '<span class="tag warn">มีปัญหา</span>' : '<span class="ok-pill">✅ เชื่อมแล้ว</span>'}</div>
+    <p class="small ${s.status === 'error' ? 'err' : 'muted'}">${line}</p>
     <div class="row gap wrap">
       ${Sheet.sheetUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.sheetUrl())}" target="_blank" rel="noopener">📗 เปิดชีต</a>` : ''}
-      ${Sheet.slipFolderUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.slipFolderUrl())}" target="_blank" rel="noopener">📁 โฟลเดอร์สลิป</a>` : ''}
     </div>
     <details class="more"><summary>ตั้งค่าเพิ่มเติม</summary>
-      <label class="check"><input type="checkbox" data-input="saveslips" ${slips ? 'checked' : ''}> ส่งสำเนารูปสลิปไป Google Drive ด้วย (โฟลเดอร์ “TSK-MoneyNote — สลิป” แยกตามเดือน)</label>
       <div class="row gap wrap">
         <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
         <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
@@ -754,29 +749,6 @@ function keepSlips(pairs) {
   });
 }
 
-// Upload saved slips to Google Drive in the background, then link each entry to its file.
-let slipQueue = Promise.resolve();
-function uploadSlips(pairs) {
-  if (!pairs.length) return;
-  // wait for keepSlips first so the entry already has hasSlip when the Drive link is added
-  slipQueue = Promise.all([slipQueue, keepQueue]).then(async () => {
-    let ok = 0, fail = 0;
-    for (const { tx, file } of pairs) {
-      try {
-        const r = await Sheet.uploadSlip(file, tx, catById(tx.cat).name);
-        const cur = state.tx.find(t => t.id === tx.id) || tx;
-        S.saveTx({ ...cur, slipUrl: r.url, slipId: r.id });
-        ok++;
-      } catch (e) { fail++; console.warn('slip upload', e); ui.slipError = e.message; }
-      ui.slipNote = `กำลังเก็บสลิปเข้า Google Drive ${ok + fail}/${pairs.length}`;
-      if (ui.view === 'scan') { const el = $('#slip-note'); if (el) el.textContent = ui.slipNote; }
-    }
-    ui.slipNote = '';
-    toast(fail ? `เก็บสลิปเข้า Drive ได้ ${ok}/${pairs.length} (${ui.slipError})` : `📁 เก็บสลิปเข้า Google Drive แล้ว ${ok} รูป`);
-    if (ui.view === 'scan') render();
-  });
-}
-
 // When a slip shows a transfer between your own accounts with an unmasked name, remember that name.
 function learnOwnerName(list) {
   if (String(state.settings.ownerNames || '').trim()) return;
@@ -815,7 +787,7 @@ async function runScan(files) {
         const found = await readFile(f, opts);
         if (!found.length) sc.errors.push({ name: f.name, msg: 'ไม่พบรายการเงินในไฟล์นี้', file: f });
         if (qr && found[0]) Object.assign(found[0], { qrRef: qr.key, ref: found[0].ref || qr.ref });
-        if (found[0]) found[0].file = f; // the slip image goes to Drive with its main entry
+        if (found[0]) found[0].file = f; // the slip image is kept with its main entry
         found.forEach(t => {
           const it = { ...t, fileName: f.name };
           it.dup = isDup(it, state.tx) || isDup(it, sc.items);
@@ -912,7 +884,6 @@ document.addEventListener('click', async e => {
       learnOwnerName(pairs.map(p => p.tx));
       render();
       if (S.canKeepSlips() && state.settings.keepSlips !== false) keepSlips(pairs.filter(p => p.file));
-      if (Sheet.saveSlipsOn()) uploadSlips(pairs.filter(p => p.file));
       return;
     }
     case 'upload-local': { const n = await S.uploadLocalToCloud(); return toast(`อัปขึ้นบัญชีแล้ว ${n} รายการ`); }
@@ -1090,7 +1061,6 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   switch (t.dataset.input) {
-    case 'saveslips': S.saveSettings({ saveSlips: t.checked }); return toast(t.checked ? 'จะส่งสำเนาสลิปไป Google Drive ด้วย' : 'ปิดการส่งสลิปไป Drive แล้ว');
     case 'keepslips': S.saveSettings({ keepSlips: t.checked }); return toast(t.checked ? 'จะเก็บรูปสลิปไว้ในแอป' : 'ปิดการเก็บรูปสลิปในแอปแล้ว');
     case 'opensignup':
       if (t.checked && !confirm('เปิดให้ทุกคนที่มีลิงก์สมัครใช้ได้? (ข้อมูลยังแยกกันของใครของมัน)')) { t.checked = false; return; }

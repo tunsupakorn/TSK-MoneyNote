@@ -121,55 +121,7 @@ function doPost(e) {
       lock.releaseLock();
     }
   }
-  if (req.action === 'slip') {
-    try { return json(Object.assign({ ok: true }, saveSlip(req))); }
-    catch (err) { return json({ ok: false, error: 'drive: ' + String(err && err.message || err) }); }
-  }
   return json({ ok: false, error: 'unknown-action' });
-}
-
-// ---- เก็บรูปสลิปใน Google Drive: "TSK-MoneyNote — สลิป/2026-11/..." ----
-const SLIP_ROOT = 'TSK-MoneyNote — สลิป';
-
-// Built-in Drive service. The script only ever creates and writes inside the
-// "TSK-MoneyNote — สลิป" folder; folder ids are remembered in Script Properties.
-function storedFolder(key, create) {
-  const props = PropertiesService.getScriptProperties();
-  const id = props.getProperty(key);
-  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
-  const f = create();
-  props.setProperty(key, f.getId());
-  return f;
-}
-function slipRoot() {
-  return storedFolder('SLIP_ROOT_ID', () => {
-    const it = DriveApp.getFoldersByName(SLIP_ROOT);
-    while (it.hasNext()) { const f = it.next(); if (!f.isTrashed()) return f; }
-    return DriveApp.createFolder(SLIP_ROOT);
-  });
-}
-function monthFolder(month) {
-  const root = slipRoot();
-  return storedFolder('SLIP_M_' + root.getId() + '_' + month, () => {
-    const it = root.getFoldersByName(month);
-    return it.hasNext() ? it.next() : root.createFolder(month);
-  });
-}
-
-function saveSlip(req) {
-  if (!req.data || !req.name) throw new Error('missing file');
-  const folder = monthFolder(/^\d{4}-\d{2}$/.test(req.month || '') ? req.month : 'อื่นๆ');
-  const name = String(req.name).replace(/[\/:*?"<>|]/g, '-').slice(0, 120);
-  const mime = /^(image\/(jpeg|png|webp|heic)|application\/pdf)$/.test(req.mime || '') ? req.mime : 'image/jpeg';
-  const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(req.data), mime, name));
-  if (req.desc) file.setDescription(String(req.desc).slice(0, 500));
-  return { id: file.getId(), url: file.getUrl(), folderUrl: slipRoot().getUrl() };
-}
-
-/** รันจากหน้าแก้ไขสคริปต์ เพื่ออนุญาตสิทธิ์ Google Drive (สร้างโฟลเดอร์สลิป) */
-function setupDrive() {
-  const root = slipRoot();
-  Logger.log('โฟลเดอร์สลิป: ' + root.getUrl());
 }
 
 // ---------------------------------------------------------------------------
