@@ -1,9 +1,9 @@
 // TSK-MoneyNote service worker: network-first for the app's own files, cache as offline fallback,
 // plus the Android share target ("Share → TSK-MoneyNote") for slip images and PDFs.
-const CACHE = 'jukjik-v20';
+const CACHE = 'jukjik-v21';
 const SHARE = 'jukjik-share';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'gemini.js', 'charts.js', 'qr.js', 'guide.html',
-  'firebase-config.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
+  'firebase-config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon-64.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

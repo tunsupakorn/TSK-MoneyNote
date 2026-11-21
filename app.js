@@ -60,7 +60,7 @@ const SYNC = {
 function header(title) {
   const [label, cls] = SYNC[state.syncStatus] || SYNC['signed-out'];
   return `<header class="top">
-    <div class="brand"><img src="icons/icon.svg" alt="" width="40" height="40"><div><h1>${title || 'TSK-MoneyNote'}</h1><small>จดรายรับรายจ่าย</small></div></div>
+    <div class="brand"><img src="icons/icon-192.png" alt="" width="40" height="40"><div><h1>${title || 'TSK-MoneyNote'}</h1><small>จดรายรับรายจ่าย</small></div></div>
     <button class="sync ${cls}" data-nav="settings" title="สถานะการซิงก์"><i></i>${label}</button>
   </header>`;
 }
@@ -93,7 +93,7 @@ function viewOnboarding() {
   const last = ui.obStep === steps.length - 1;
   return `<section class="onboard">
     <button class="link skip" data-action="ob-done">ข้าม</button>
-    <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">${s.e}</span></div>
+    <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-chick"><span class="ob-emoji">${s.e}</span></div>
     <h2>${s.h}</h2><p>${s.p}</p>
     <div class="dots">${steps.map((_, i) => `<i class="${i === ui.obStep ? 'on' : ''}"></i>`).join('')}</div>
     ${last
@@ -137,7 +137,7 @@ function viewHome() {
         <div><small>รายรับ</small><b class="num">${baht(inc)}</b></div>
         <div><small>รายจ่าย</small><b class="num">${baht(exp)}</b></div>
       </div>
-      <img src="icons/icon.svg" alt="" class="hero-chick">
+      <img src="icons/icon-512.png" alt="" class="hero-chick">
     </section>
     ${budgetCard}
     ${list.length ? `<label class="search"><span aria-hidden="true">🔍</span><input type="search" placeholder="ค้นหารายการ" value="${esc(ui.search)}" data-input="search"></label>` : ''}
@@ -147,7 +147,7 @@ function viewHome() {
         <ul class="txs">${items.map(txRow).join('')}</ul>
       </section>`).join('')
     : `<section class="empty">
-        <img src="icons/icon.svg" alt="" width="96" height="96">
+        <img src="icons/icon-512.png" alt="" width="96" height="96">
         <h3>${q ? 'ไม่พบรายการที่ค้นหา' : 'ยังไม่มีรายการเดือนนี้'}</h3>
         ${q ? '' : `<p>กดปุ่มเหลือง <b>🧾 อ่านสลิป</b> ตรงกลาง หรือ <b>✏️ จดเอง</b></p>
         <button class="btn primary" data-nav="scan">🧾 อ่านสลิป</button>`}
@@ -319,14 +319,14 @@ function viewGate() {
   const email = esc(state.user?.email || '');
   if (state.access === 'private') {
     return `<section class="onboard gate">
-      <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔒</span></div>
+      <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-chick"><span class="ob-emoji">🔒</span></div>
       <h2>แอปส่วนตัว</h2>
       <p>TSK-MoneyNote นี้ใช้ได้เฉพาะบัญชีของเจ้าของเท่านั้น<br>ตอนนี้ล็อกอินอยู่ด้วย <b>${email}</b></p>
       <button class="btn primary big" data-action="signout-now">ออกจากระบบ แล้วล็อกอินบัญชีเจ้าของ</button>
     </section>`;
   }
   return `<section class="onboard gate">
-    <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
+    <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
     <h2>เข้าสู่ระบบ TSK-MoneyNote</h2>
     <p>แอปส่วนตัว · ล็อกอินด้วยบัญชีเดียวกันทุกเครื่อง ข้อมูลซิงก์ถึงกันหมด</p>
     <button class="btn primary big" data-action="google">เข้าสู่ระบบด้วย Google</button>
