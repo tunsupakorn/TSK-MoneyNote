@@ -1,4 +1,4 @@
-# 🐣 จุกจิก JukJik
+# 🐣 TSK-MoneyNote
 
 แอปจดรายรับรายจ่ายส่วนตัว อ่านสลิปและใบแจ้งยอดบัตรเครดิตด้วย Gemini ซิงก์ทุกเครื่องด้วย Firebase
 ไม่ต้องติดตั้งอะไรบนคอม ไม่ต้องผ่าน App Store — เปิดผ่านเว็บแล้ว "เพิ่มไปยังหน้าจอโฮม" ใช้ได้เหมือนแอปจริง
@@ -18,10 +18,10 @@
 
 ## ขั้นที่ 1 — เอาขึ้น GitHub Pages (ได้ลิงก์ใช้งาน)
 
-1. ไปที่ github.com › ปุ่ม **New** (สร้าง repository) › ตั้งชื่อ `jukjik` › เลือก **Public** › Create
+1. ไปที่ github.com › ปุ่ม **New** (สร้าง repository) › ตั้งชื่อ `TSK-MoneyNote` › เลือก **Public** › Create
 2. ในหน้า repo กด **uploading an existing file** › ลากไฟล์ทั้งหมดในโฟลเดอร์นี้ (รวมโฟลเดอร์ `icons`) ใส่ › **Commit changes**
 3. ไปที่ **Settings › Pages** › Source: **Deploy from a branch** › Branch: `main` / `(root)` › Save
-4. รอ 1–2 นาที จะได้ลิงก์ `https://<ชื่อผู้ใช้>.github.io/jukjik/`
+4. รอ 1–2 นาที จะได้ลิงก์ `https://<ชื่อผู้ใช้>.github.io/TSK-MoneyNote/`
 5. เปิดลิงก์บนมือถือ
    - **iPhone/iPad:** Safari › ปุ่มแชร์ › *เพิ่มไปยังหน้าจอโฮม*
    - **Android:** Chrome › ⋮ › *ติดตั้งแอป*
@@ -41,7 +41,7 @@
 
 ## ขั้นที่ 3 — Firebase (ซิงก์ทุกเครื่อง, ฟรี)
 
-1. เข้า **console.firebase.google.com** › **Create a project** › ตั้งชื่อ `jukjik` (ปิด Google Analytics ได้)
+1. เข้า **console.firebase.google.com** › **Create a project** › ตั้งชื่อ `tsk-moneynote` (ปิด Google Analytics ได้)
 2. **Build › Authentication › Get started** › แท็บ Sign-in method › เปิด **Email/Password** และ **Google**
 3. Authentication › **Settings › Authorized domains** › Add domain › ใส่ `<ชื่อผู้ใช้>.github.io`
 4. **Build › Firestore Database › Create database** › เลือก location `asia-southeast1` (สิงคโปร์) › Production mode
@@ -65,7 +65,7 @@ Firebase ยังเป็นที่เก็บหลัก ส่วน Goo
 โค้ดสคริปต์อยู่ในโฟลเดอร์ `apps-script/`
 
 1. สร้าง Sheet และสคริปต์ด้วย [clasp](https://github.com/google/clasp):
-   `npx @google/clasp login` แล้ว `npx @google/clasp create-script --type sheets --title "จุกจิก JukJik" --rootDir apps-script`
+   `npx @google/clasp login` แล้ว `npx @google/clasp create-script --type sheets --title "TSK-MoneyNote" --rootDir apps-script`
    (ถ้า clasp เขียนทับ `apps-script/appsscript.json` ให้คืนค่าไฟล์จาก git ก่อน)
 2. `npx @google/clasp push --force` แล้ว `npx @google/clasp create-deployment` จะได้ deployment id
 3. เปิดหน้าแก้ไขสคริปต์ เลือกฟังก์ชัน `setup` แล้วกด **เรียกใช้** จากนั้นกด **อนุญาต** สิทธิ์

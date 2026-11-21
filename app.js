@@ -63,7 +63,7 @@ const SYNC = {
 function header(title) {
   const [label, cls] = SYNC[state.syncStatus] || SYNC.local;
   return `<header class="top">
-    <div class="brand"><img src="icons/icon.svg" alt="" width="40" height="40"><div><h1>${title || 'จุกจิก'}</h1><small>JukJik</small></div></div>
+    <div class="brand"><img src="icons/icon.svg" alt="" width="40" height="40"><div><h1>${title || 'TSK-MoneyNote'}</h1><small>จดรายรับรายจ่าย</small></div></div>
     <button class="sync ${cls}" data-nav="settings" title="สถานะการซิงก์"><i></i>${label}</button>
   </header>`;
 }
@@ -87,7 +87,7 @@ function txRow(t) {
 // ---------- views ----------
 function viewOnboarding() {
   const steps = [
-    { e: '🐣', h: 'สวัสดี! ฉันชื่อ จุกจิก', p: 'ผู้ช่วยจดรายรับรายจ่ายของคุณ เรื่องเงินจุกจิกแค่ไหน ฉันก็จดให้ครบ' },
+    { e: '🐣', h: 'สวัสดี! ฉันคือ TSK-MoneyNote', p: 'ผู้ช่วยจดรายรับรายจ่ายของคุณ เรื่องเงินจุกจิกแค่ไหน ฉันก็จดให้ครบ' },
     { e: '🧾', h: 'ส่งสลิปมา ฉันอ่านให้', p: 'เลือกรูปสลิปโอนเงินย้อนหลังได้ทีละหลายใบ (สูงสุด 30 วัน) อ่านได้ทุกธนาคาร รวมถึงใบแจ้งยอดบัตรเครดิต PDF' },
     { e: '🔄', h: 'ซิงก์ทุกเครื่อง', p: 'มือถือ แท็บเล็ต กี่เครื่องก็ได้ ล็อกอินบัญชีเดียว ข้อมูลตรงกันทันที ไม่ต้องใช้เบอร์มือถือหรือ OTP' },
     { e: '📊', h: 'รู้ว่าเงินไปไหน', p: 'สรุปรายวัน รายเดือน แยกหมวด พร้อมตั้งงบไม่ให้ใช้เกิน' },
@@ -204,7 +204,7 @@ function viewScan() {
   const off = sc.busy || !hasKey ? 'disabled' : '';
   const tray = ui.tray;
   return `${header('อ่านสลิป')}
-    ${!hasKey ? `<section class="card notice"><p>🔑 ต้องใส่ Gemini API key ก่อน (ฟรี) เพื่อให้จุกจิกอ่านสลิปได้</p>
+    ${!hasKey ? `<section class="card notice"><p>🔑 ต้องใส่ Gemini API key ก่อน (ฟรี) เพื่อให้ TSK-MoneyNote อ่านสลิปได้</p>
       <button class="btn primary sm" data-action="goto-gemini">ไปใส่ key</button></section>` : ''}
     <section class="pick ${off}" data-drop>
       <label class="pick-main">
@@ -217,7 +217,7 @@ function viewScan() {
         <label class="pick-btn"><input type="file" accept="application/pdf,.pdf" multiple data-input="pick" ${off}>📄<span>ใบแจ้งยอด PDF</span></label>
         <button class="pick-btn" data-action="paste-img" ${off}>📋<span>วางรูป</span></button>
       </div>
-      <small class="pick-hint">💡 ${/Android/.test(navigator.userAgent) ? 'แชร์รูปจากแกลเลอรี / LINE / แอปธนาคาร มาที่ “จุกจิก” ได้เลย (ติดตั้งแอปบนหน้าจอหลักก่อน)' : 'ลากรูปมาวาง หรือกด Ctrl+V เพื่อวางรูปได้เลย'}</small>
+      <small class="pick-hint">💡 ${/Android/.test(navigator.userAgent) ? 'แชร์รูปจากแกลเลอรี / LINE / แอปธนาคาร มาที่ “TSK-MoneyNote” ได้เลย (ติดตั้งแอปบนหน้าจอหลักก่อน)' : 'ลากรูปมาวาง หรือกด Ctrl+V เพื่อวางรูปได้เลย'}</small>
     </section>
     ${tray.length ? `<section class="tray">
       <div class="row between"><b>เลือกไว้ ${tray.length} ไฟล์</b><button class="link small" data-action="tray-clear">ล้าง</button></div>
@@ -229,7 +229,7 @@ function viewScan() {
     </section>` : ''}
     ${ui.slipNote ? `<p class="muted small center" id="slip-note">${esc(ui.slipNote)}</p>` : ''}
     <label class="check"><input type="checkbox" data-input="only30" ${sc.only30 ? 'checked' : ''}> เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</label>
-    ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>จุกจิกกำลังอ่าน… ${sc.done}/${sc.total}</p>
+    ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>TSK-MoneyNote กำลังอ่าน… ${sc.done}/${sc.total}</p>
       <div class="meter"><div style="width:${sc.total ? sc.done / sc.total * 100 : 0}%"></div></div>
       <small class="muted" id="scan-note">${esc(scanNote())}</small>
       <button class="btn ghost sm" data-action="scan-cancel" ${sc.cancel ? 'disabled' : ''}>${sc.cancel ? 'กำลังยกเลิก…' : 'ยกเลิก'}</button></section>` : ''}
@@ -345,7 +345,7 @@ function viewSettings() {
       </div>
       <button class="link" data-action="show-ob">ดูหน้าแนะนำแอปอีกครั้ง</button>
     </section>
-    <p class="center muted small pad">จุกจิก JukJik v1.0</p>`;
+    <p class="center muted small pad">TSK-MoneyNote v1.0</p>`;
 }
 
 // ---------- access gate (email not verified / not on the allow list) ----------
@@ -355,14 +355,14 @@ function viewGate() {
     return `<section class="onboard gate">
       <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔒</span></div>
       <h2>แอปส่วนตัว</h2>
-      <p>จุกจิกนี้ใช้ได้เฉพาะบัญชีของเจ้าของเท่านั้น<br>ตอนนี้ล็อกอินอยู่ด้วย <b>${email}</b></p>
+      <p>TSK-MoneyNote นี้ใช้ได้เฉพาะบัญชีของเจ้าของเท่านั้น<br>ตอนนี้ล็อกอินอยู่ด้วย <b>${email}</b></p>
       <button class="btn primary big" data-action="signout-now">ออกจากระบบ แล้วล็อกอินบัญชีเจ้าของ</button>
     </section>`;
   }
   if (S.privateApp && state.mode !== 'cloud') {
     return `<section class="onboard gate">
       <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
-      <h2>เข้าสู่ระบบจุกจิก</h2>
+      <h2>เข้าสู่ระบบ TSK-MoneyNote</h2>
       <p>แอปส่วนตัว · ล็อกอินด้วยบัญชีเดียวกันทุกเครื่อง ข้อมูลซิงก์ถึงกันหมด</p>
       <button class="btn primary big" data-action="google">เข้าสู่ระบบด้วย Google</button>
       <details class="more"><summary>เข้าสู่ระบบด้วยอีเมล</summary>
@@ -381,7 +381,7 @@ function viewGate() {
     <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">${verify ? '📧' : '🔒'}</span></div>
     <h2>${verify ? 'ยืนยันอีเมลก่อนใช้งาน' : 'บัญชีนี้ยังไม่ได้รับอนุญาต'}</h2>
     ${verify
-      ? `<p>จุกจิกส่งลิงก์ยืนยันไปที่ <b>${email}</b> แล้ว เปิดอีเมล (ดูในโฟลเดอร์สแปมด้วย) กดลิงก์ แล้วกลับมากดปุ่มด้านล่าง</p>
+      ? `<p>TSK-MoneyNote ส่งลิงก์ยืนยันไปที่ <b>${email}</b> แล้ว เปิดอีเมล (ดูในโฟลเดอร์สแปมด้วย) กดลิงก์ แล้วกลับมากดปุ่มด้านล่าง</p>
          <button class="btn primary big" data-action="gate-recheck">ยืนยันแล้ว เข้าใช้งาน</button>
          <button class="btn ghost" data-action="gate-resend">ส่งอีเมลยืนยันอีกครั้ง</button>`
       : `<p>แอปนี้เปิดให้เฉพาะคนที่เจ้าของแอปอนุญาต ส่งอีเมลนี้ให้เจ้าของแอปเพิ่มให้:</p>
@@ -394,10 +394,10 @@ function viewGate() {
 }
 
 // ---------- owner: who may use the app ----------
-const APP_URL = 'https://tunsupakorn.github.io/jukjik/';
+const APP_URL = 'https://tunsupakorn.github.io/TSK-MoneyNote/';
 const TEMPLATE_URL = 'https://docs.google.com/spreadsheets/d/1IT8M4VotXmahde_1bo0Shdfwyem8lhZWQuTZL5uCnH8/copy';
 function inviteText(name) {
-  return `${name ? `สวัสดี ${name} ` : ''}ชวนมาใช้ "จุกจิก" แอปจดรายรับรายจ่าย อ่านสลิปให้อัตโนมัติ 🐣
+  return `${name ? `สวัสดี ${name} ` : ''}ชวนมาใช้ "TSK-MoneyNote" แอปจดรายรับรายจ่าย อ่านสลิปให้อัตโนมัติ 🐣
 1) เปิด ${APP_URL} แล้วติดตั้งลงหน้าจอ (วิธีติดตั้ง: ${APP_URL}guide.html#sec-install)
 2) ตั้งค่า › สมัคร/เข้าสู่ระบบด้วย Google หรืออีเมลที่ให้ไว้
 3) (ไม่บังคับ) อยากได้ Google Sheet ของตัวเอง: ${TEMPLATE_URL.includes('TEMPLATE_ID') ? APP_URL + 'guide.html#sheet-template' : TEMPLATE_URL}`;
@@ -475,7 +475,7 @@ function sheetCard() {
       ${state.mode !== 'cloud' ? '<p class="small">🔐 ล็อกอินบัญชีก่อน แล้วค่อยเชื่อมชีต</p>' : ''}
       <ol class="steps">
         <li><a class="btn primary sm" href="${TEMPLATE_URL}" target="_blank" rel="noopener">① 📗 สร้างชีตของฉัน (กด “ทำสำเนา”) ↗</a></li>
-        <li><span class="small">② <b>บนคอมพิวเตอร์</b> เปิดชีตที่สร้าง › เมนู <b>🐣 จุกจิก › เชื่อมกับแอปจุกจิก</b> แล้วกดปุ่ม
+        <li><span class="small">② <b>บนคอมพิวเตอร์</b> เปิดชีตที่สร้าง › เมนู <b>🐣 TSK-MoneyNote › เชื่อมกับแอป</b> แล้วกดปุ่ม
           <b>“เปิดแอปและเชื่อมต่อให้อัตโนมัติ”</b> — เสร็จ! ไม่ต้องคัดลอกลิงก์</span></li>
       </ol>
       <details class="more"><summary>มีลิงก์ web app อยู่แล้ว</summary>
@@ -502,7 +502,7 @@ function sheetCard() {
       ${Sheet.slipFolderUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.slipFolderUrl())}" target="_blank" rel="noopener">📁 โฟลเดอร์สลิป</a>` : ''}
     </div>
     <details class="more"><summary>ตั้งค่าเพิ่มเติม</summary>
-      <label class="check"><input type="checkbox" data-input="saveslips" ${slips ? 'checked' : ''}> เก็บรูปสลิปไว้ใน Google Drive (โฟลเดอร์ “จุกจิก JukJik — สลิป” แยกตามเดือน)</label>
+      <label class="check"><input type="checkbox" data-input="saveslips" ${slips ? 'checked' : ''}> เก็บรูปสลิปไว้ใน Google Drive (โฟลเดอร์ “TSK-MoneyNote — สลิป” แยกตามเดือน)</label>
       <div class="row gap wrap">
         <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
         <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
@@ -664,7 +664,7 @@ function takeConnectLink() {
   if (!pending) return;
   ui.view = 'settings';
   if (state.cloudConfigured && !(state.mode === 'cloud' && state.syncStatus === 'synced')) {
-    if (state.syncStatus === 'signed-out' && !takeConnectLink.told) { takeConnectLink.told = true; toast('ล็อกอินก่อน แล้วจุกจิกจะเชื่อม Google Sheet ให้เอง'); render(); }
+    if (state.syncStatus === 'signed-out' && !takeConnectLink.told) { takeConnectLink.told = true; toast('ล็อกอินก่อน แล้ว TSK-MoneyNote จะเชื่อม Google Sheet ให้เอง'); render(); }
     return; // try again once the account has loaded
   }
   try { sessionStorage.removeItem('jj_connect'); } catch {}
@@ -677,7 +677,7 @@ function takeConnectLink() {
 }
 window.addEventListener('hashchange', takeConnectLink);
 
-// Files shared to the app (Android share sheet → "จุกจิก"): the service worker parks them in a cache.
+// Files shared to the app (Android share sheet → "TSK-MoneyNote"): the service worker parks them in a cache.
 async function takeSharedFiles() {
   if (!new URLSearchParams(location.search).has('shared')) return;
   history.replaceState(null, '', location.pathname);
@@ -885,7 +885,7 @@ document.addEventListener('click', async e => {
     case 'allow-invite': {
       const a = state.allowList.find(x => x.email === el.dataset.e);
       const text = inviteText(a?.name);
-      try { if (navigator.share) await navigator.share({ title: 'ชวนใช้จุกจิก', text }); else { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว ส่งทาง LINE ได้เลย'); } }
+      try { if (navigator.share) await navigator.share({ title: 'ชวนใช้ TSK-MoneyNote', text }); else { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว ส่งทาง LINE ได้เลย'); } }
       catch (err) { if (err?.name !== 'AbortError') { try { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว'); } catch { prompt('คัดลอกข้อความนี้', text); } } }
       return;
     }
@@ -951,13 +951,13 @@ document.addEventListener('click', async e => {
     case 'owner-save': S.saveSettings({ ownerNames: $('[data-input="owner"]').value.trim() }); return toast('บันทึกชื่อแล้ว');
     case 'theme': S.savePrefs({ theme: el.dataset.t }); applyTheme(); return render();
     case 'export-json':
-      return download(`jukjik-backup-${todayISO()}.json`, JSON.stringify({ app: 'jukjik', version: 1, tx: state.tx, settings: state.settings }, null, 2), 'application/json');
+      return download(`tsk-moneynote-backup-${todayISO()}.json`, JSON.stringify({ app: 'jukjik', version: 1, tx: state.tx, settings: state.settings }, null, 2), 'application/json');
     case 'export-csv': {
       const head = 'date,type,amount,category,method,merchant,note';
       const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const rows = [...state.tx].sort((a, b) => a.date.localeCompare(b.date))
         .map(t => [t.date, t.type, t.amount, catById(t.cat).name, t.method, t.merchant, t.note].map(q).join(','));
-      return download(`jukjik-${todayISO()}.csv`, '﻿' + [head, ...rows].join('\n'), 'text/csv');
+      return download(`tsk-moneynote-${todayISO()}.csv`, '﻿' + [head, ...rows].join('\n'), 'text/csv');
     }
   }
 });

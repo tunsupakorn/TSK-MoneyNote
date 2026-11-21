@@ -1,6 +1,6 @@
 {
-  "name": "จุกจิก JukJik — จดรายรับรายจ่าย",
-  "short_name": "จุกจิก",
+  "name": "TSK-MoneyNote — จดรายรับรายจ่าย",
+  "short_name": "TSK-MoneyNote",
   "description": "จดรายรับรายจ่าย อ่านสลิปอัตโนมัติ ซิงก์ทุกเครื่อง",
   "lang": "th",
   "start_url": "./",
