@@ -1,6 +1,6 @@
 // TSK-MoneyNote service worker: network-first for the app's own files, cache as offline fallback,
 // plus the Android share target ("Share → TSK-MoneyNote") for slip images and PDFs.
-const CACHE = 'jukjik-v17';
+const CACHE = 'jukjik-v18';
 const SHARE = 'jukjik-share';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'gemini.js', 'charts.js', 'sheets.js', 'qr.js', 'guide.html',
   'firebase-config.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];

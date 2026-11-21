@@ -237,8 +237,31 @@ export async function saveMany(list) {
 }
 
 export function deleteTx(id) {
-  if (state.mode === 'cloud') fb.F.deleteDoc(fb.F.doc(...userPath('tx', id))).catch(syncFail);
+  if (state.mode === 'cloud') {
+    const hadSlip = state.tx.find(t => t.id === id)?.hasSlip;
+    fb.F.deleteDoc(fb.F.doc(...userPath('tx', id))).catch(syncFail);
+    if (hadSlip) fb.F.deleteDoc(fb.F.doc(...userPath('slips', id))).catch(e => console.warn('slip delete', e));
+  }
   else { state.tx = state.tx.filter(t => t.id !== id); writeLocal(); }
+}
+
+// ---- slip images, kept in Firestore next to their entry: users/{uid}/slips/{txId} ----
+export const canKeepSlips = () => state.mode === 'cloud' && !!fb;
+export async function saveSlipImage(txId, { blob, width, height }) {
+  if (!canKeepSlips()) throw new Error('ต้องล็อกอินก่อนจึงจะเก็บรูปสลิปได้');
+  const { F } = fb;
+  const bytes = F.Bytes.fromUint8Array(new Uint8Array(await blob.arrayBuffer()));
+  await F.setDoc(F.doc(...userPath('slips', txId)), { img: bytes, mime: blob.type || 'image/jpeg', width, height, size: blob.size, createdAt: Date.now() });
+  await F.setDoc(F.doc(...userPath('tx', txId)), { hasSlip: true, updatedAt: Date.now() }, { merge: true });
+}
+// Returns an object URL for the slip image, or null if there is none.
+export async function loadSlipImage(txId) {
+  if (!canKeepSlips()) return null;
+  const { F } = fb;
+  const snap = await F.getDoc(F.doc(...userPath('slips', txId)));
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return URL.createObjectURL(new Blob([d.img.toUint8Array()], { type: d.mime || 'image/jpeg' }));
 }
 
 export function saveSettings(patch) {

@@ -80,7 +80,7 @@ function txRow(t) {
   return `<li><button class="tx" data-action="edit" data-id="${esc(t.id)}">
     <span class="bubble" aria-hidden="true">${c.emoji}</span>
     <span class="tx-main"><b>${esc(c.name)}</b><small>${esc(sub || METHODS[t.method] || '')}</small></span>
-    <span class="tx-amt num ${t.type}">${t.slipUrl ? '<i class="clip" title="มีสลิปใน Drive">📎</i>' : ''}${SIGN[t.type] || ''}${baht(t.amount)}</span>
+    <span class="tx-amt num ${t.type}">${t.hasSlip || t.slipUrl ? '<i class="clip" title="มีรูปสลิป">📎</i>' : ''}${SIGN[t.type] || ''}${baht(t.amount)}</span>
   </button></li>`;
 }
 
@@ -334,7 +334,8 @@ function viewSettings() {
         <button class="btn ghost sm" data-action="export-csv">ส่งออก CSV</button>
         <label class="btn ghost sm">นำเข้า JSON<input type="file" accept="application/json" data-input="import" hidden></label>
       </div>
-      <small class="muted">ทั้งหมด ${state.tx.length} รายการ</small>
+      <small class="muted">ทั้งหมด ${state.tx.length} รายการ${state.mode === 'cloud' ? ` · มีรูปสลิป ${state.tx.filter(t => t.hasSlip).length} รายการ` : ''}</small>
+      ${state.mode === 'cloud' ? `<label class="check"><input type="checkbox" data-input="keepslips" ${state.settings.keepSlips !== false ? 'checked' : ''}> เก็บรูปสลิปไว้ในแอป (ซิงก์ทุกเครื่อง กดดูได้จากรายการ)</label>` : ''}
     </section>
 
     <section class="card"><h3>📖 วิธีใช้งาน</h3>
@@ -502,7 +503,7 @@ function sheetCard() {
       ${Sheet.slipFolderUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.slipFolderUrl())}" target="_blank" rel="noopener">📁 โฟลเดอร์สลิป</a>` : ''}
     </div>
     <details class="more"><summary>ตั้งค่าเพิ่มเติม</summary>
-      <label class="check"><input type="checkbox" data-input="saveslips" ${slips ? 'checked' : ''}> เก็บรูปสลิปไว้ใน Google Drive (โฟลเดอร์ “TSK-MoneyNote — สลิป” แยกตามเดือน)</label>
+      <label class="check"><input type="checkbox" data-input="saveslips" ${slips ? 'checked' : ''}> ส่งสำเนารูปสลิปไป Google Drive ด้วย (โฟลเดอร์ “TSK-MoneyNote — สลิป” แยกตามเดือน)</label>
       <div class="row gap wrap">
         <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
         <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
@@ -599,7 +600,10 @@ function renderSheet() {
     </div>
     <label class="lbl">โน้ต<input type="text" value="${esc(d.note || '')}" placeholder="เช่น ข้าวมันไก่ร้านประจำ" data-d="note"></label>
     ${d.merchant ? `<small class="muted">ผู้รับ: ${esc(d.merchant)}${d.ref ? ' · อ้างอิง ' + esc(d.ref) : ''}</small>` : ''}
-    ${/^https:\/\/drive\.google\.com\//.test(d.slipUrl || '') ? `<a class="btn ghost sm" href="${esc(d.slipUrl)}" target="_blank" rel="noopener">📎 ดูสลิปใน Google Drive</a>` : ''}
+    ${d.hasSlip || /^https:\/\/drive\.google\.com\//.test(d.slipUrl || '') ? `<div class="row gap wrap">
+      ${d.hasSlip ? `<button type="button" class="btn ghost sm" data-action="view-slip" data-id="${esc(d.id)}">🧾 ดูสลิป</button>` : ''}
+      ${/^https:\/\/drive\.google\.com\//.test(d.slipUrl || '') ? `<a class="btn ghost sm" href="${esc(d.slipUrl)}" target="_blank" rel="noopener">📎 ดูใน Google Drive</a>` : ''}
+    </div>` : ''}
     <div class="row gap">
       ${d.id ? `<button type="button" class="btn danger" data-action="d-delete">ลบ</button>` : ''}
       <button type="submit" class="btn primary big grow">บันทึก</button>
@@ -696,11 +700,66 @@ async function takeSharedFiles() {
   } catch (e) { console.warn('share', e); }
 }
 
+// Show a kept slip image full screen.
+let slipViewUrl = '';
+async function viewSlip(id) {
+  const dlg = $('#slipview');
+  if (slipViewUrl) { URL.revokeObjectURL(slipViewUrl); slipViewUrl = ''; }
+  dlg.innerHTML = `<div class="slip-view"><button type="button" class="icon-btn" data-action="close-slip" aria-label="ปิด">✕</button><div class="spinner"></div></div>`;
+  dlg.showModal();
+  try {
+    slipViewUrl = await S.loadSlipImage(id);
+    if (!dlg.open) return;
+    dlg.querySelector('.slip-view').innerHTML = `<button type="button" class="icon-btn" data-action="close-slip" aria-label="ปิด">✕</button>` +
+      (slipViewUrl ? `<img src="${slipViewUrl}" alt="รูปสลิป">` : '<p class="muted">ไม่พบรูปสลิปของรายการนี้</p>');
+  } catch (e) {
+    dlg.querySelector('.slip-view').innerHTML = `<button type="button" class="icon-btn" data-action="close-slip" aria-label="ปิด">✕</button><p class="err">โหลดรูปไม่ได้: ${esc(e.message)}</p>`;
+  }
+}
+
+// Shrink a slip photo to a sharp-enough JPEG that fits well inside a Firestore document (aim ≤ 250KB).
+async function compressSlip(file) {
+  const bmp = await createImageBitmap(file);
+  const toJpeg = (c, q) => new Promise(r => c.toBlob(r, 'image/jpeg', q));
+  let max = 1400, best = null;
+  for (let round = 0; round < 3; round++, max = Math.round(max * 0.8)) {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    for (const q of [0.75, 0.6, 0.45]) {
+      const blob = await toJpeg(c, q);
+      best = { blob, width: c.width, height: c.height };
+      if (blob.size <= 250 * 1024) return best;
+    }
+  }
+  if (best.blob.size > 900 * 1024) throw new Error('รูปใหญ่เกินไป');
+  return best;
+}
+
+// Keep saved slip photos in Firestore in the background (PDF statements are not kept).
+let keepQueue = Promise.resolve();
+function keepSlips(pairs) {
+  pairs = pairs.filter(p => /^image\//.test(p.file?.type || ''));
+  if (!pairs.length) return;
+  keepQueue = keepQueue.then(async () => {
+    let ok = 0, fail = 0, lastErr = '';
+    for (const { tx, file } of pairs) {
+      try { await S.saveSlipImage(tx.id, await compressSlip(file)); ok++; }
+      catch (e) { fail++; lastErr = e.message; console.warn('keep slip', e); }
+    }
+    if (fail) toast(`เก็บรูปสลิปได้ ${ok}/${pairs.length} (${lastErr})`);
+  });
+}
+
 // Upload saved slips to Google Drive in the background, then link each entry to its file.
 let slipQueue = Promise.resolve();
 function uploadSlips(pairs) {
   if (!pairs.length) return;
-  slipQueue = slipQueue.then(async () => {
+  // wait for keepSlips first so the entry already has hasSlip when the Drive link is added
+  slipQueue = Promise.all([slipQueue, keepQueue]).then(async () => {
     let ok = 0, fail = 0;
     for (const { tx, file } of pairs) {
       try {
@@ -817,6 +876,8 @@ document.addEventListener('click', async e => {
     case 'add': return openSheet();
     case 'edit': return openSheet(state.tx.find(t => t.id === el.dataset.id));
     case 'close-sheet': return $('#sheet').close();
+    case 'view-slip': return viewSlip(el.dataset.id);
+    case 'close-slip': return $('#slipview').close();
     case 'month': {
       const [y, m] = ui.month.split('-').map(Number);
       const d = new Date(y, m - 1 + Number(el.dataset.d), 1);
@@ -850,6 +911,7 @@ document.addEventListener('click', async e => {
       if (pairs[0]) ui.month = pairs[0].tx.date.slice(0, 7);
       learnOwnerName(pairs.map(p => p.tx));
       render();
+      if (S.canKeepSlips() && state.settings.keepSlips !== false) keepSlips(pairs.filter(p => p.file));
       if (Sheet.saveSlipsOn()) uploadSlips(pairs.filter(p => p.file));
       return;
     }
@@ -1028,7 +1090,8 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   switch (t.dataset.input) {
-    case 'saveslips': S.saveSettings({ saveSlips: t.checked }); return toast(t.checked ? 'จะเก็บสลิปไว้ใน Google Drive' : 'ปิดการเก็บสลิปแล้ว');
+    case 'saveslips': S.saveSettings({ saveSlips: t.checked }); return toast(t.checked ? 'จะส่งสำเนาสลิปไป Google Drive ด้วย' : 'ปิดการส่งสลิปไป Drive แล้ว');
+    case 'keepslips': S.saveSettings({ keepSlips: t.checked }); return toast(t.checked ? 'จะเก็บรูปสลิปไว้ในแอป' : 'ปิดการเก็บรูปสลิปในแอปแล้ว');
     case 'opensignup':
       if (t.checked && !confirm('เปิดให้ทุกคนที่มีลิงก์สมัครใช้ได้? (ข้อมูลยังแยกกันของใครของมัน)')) { t.checked = false; return; }
       try { await S.setOpenSignup(t.checked); toast(t.checked ? 'เปิดให้ทุกคนใช้ได้แล้ว' : 'จำกัดเฉพาะอีเมลที่อนุญาตแล้ว'); } catch (err) { toast('❌ ' + err.message); }

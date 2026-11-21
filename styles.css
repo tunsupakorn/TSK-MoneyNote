@@ -283,6 +283,12 @@ form.row select { width: auto; }
 .sheet[open] { animation: up .22s ease-out; }
 @keyframes up { from { transform: translateY(40px); opacity: 0; } }
 @media (min-width: 700px) { .sheet { margin: auto; border-radius: 26px; } }
+.slipview { border: 0; padding: 0; margin: auto; max-width: min(560px, 100vw); max-height: 100vh; background: transparent; }
+.slipview::backdrop { background: rgba(10, 8, 4, .85); }
+.slip-view { position: relative; display: grid; place-items: center; min-width: 200px; min-height: 200px; padding: 12px; }
+.slip-view img { display: block; max-width: 100%; max-height: calc(100vh - 24px); border-radius: 14px; background: #fff; }
+.slip-view .icon-btn { position: absolute; top: 18px; right: 18px; background: var(--surface); color: var(--text); }
+.slip-view p { background: var(--surface); padding: 16px; border-radius: 14px; }
 .sheet-body { padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); display: grid; gap: 12px; }
 .grab { width: 44px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 2px; }
 .sheet h2 { font-size: 1.2rem; }
