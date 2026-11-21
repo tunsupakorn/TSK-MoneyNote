@@ -2,5 +2,3 @@
 firebase-debug.log
 *.log
 .firebase/
-.clasp.json
-.clasp.template.json

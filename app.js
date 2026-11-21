@@ -1,7 +1,6 @@
 import * as S from './store.js';
 import { readFile, testKey, DEFAULT_MODEL, setModelChangeHandler, setFallbackHandler, setStatusHandler, cancelAll, resetCancel } from './gemini.js';
 import { categoryBars, dailyColumns, bindColumnTips } from './charts.js';
-import * as Sheet from './sheets.js';
 import { readSlipQR } from './qr.js';
 
 const { state, prefs } = S;
@@ -23,7 +22,6 @@ const ui = {
   search: '',
   scan: { busy: false, done: 0, total: 0, items: [], errors: [], skipped: [], only30: true },
   tray: [],        // picked files waiting to be read: { file, url }
-  authMode: 'signin',
   authBusy: false,
   authError: '',
   obStep: 0,
@@ -56,11 +54,11 @@ function applyTheme() {
 
 // ---------- shared pieces ----------
 const SYNC = {
-  local: ['ในเครื่องนี้', 'local'], 'signed-out': ['ยังไม่ล็อกอิน', 'warn'], pending: ['กำลังซิงก์…', 'pending'],
+  'signed-out': ['ยังไม่ล็อกอิน', 'warn'], pending: ['กำลังซิงก์…', 'pending'],
   synced: ['ซิงก์แล้ว', 'ok'], error: ['ซิงก์ผิดพลาด', 'bad'],
 };
 function header(title) {
-  const [label, cls] = SYNC[state.syncStatus] || SYNC.local;
+  const [label, cls] = SYNC[state.syncStatus] || SYNC['signed-out'];
   return `<header class="top">
     <div class="brand"><img src="icons/icon.svg" alt="" width="40" height="40"><div><h1>${title || 'TSK-MoneyNote'}</h1><small>จดรายรับรายจ่าย</small></div></div>
     <button class="sync ${cls}" data-nav="settings" title="สถานะการซิงก์"><i></i>${label}</button>
@@ -131,13 +129,6 @@ function viewHome() {
     </section>`;
   }
 
-  const banner = state.mode === 'cloud' && state.localPendingCount > 0 ? `<section class="card notice">
-      <p>📦 มี <b>${state.localPendingCount}</b> รายการที่จดไว้ในเครื่องนี้ก่อนล็อกอิน</p>
-      <div class="row gap"><button class="btn primary sm" data-action="upload-local">อัปขึ้นบัญชี</button>
-      <button class="btn ghost sm" data-action="discard-local">ไม่ต้อง</button></div></section>`
-    : state.syncStatus === 'signed-out' ? `<section class="card notice"><p>🔐 ล็อกอินเพื่อซิงก์ข้อมูลทุกเครื่อง</p>
-      <button class="btn primary sm" data-nav="settings">ล็อกอิน</button></section>` : '';
-
   return `${header()}${monthSwitch()}
     <section class="hero">
       <span class="hero-label">คงเหลือ</span>
@@ -148,7 +139,7 @@ function viewHome() {
       </div>
       <img src="icons/icon.svg" alt="" class="hero-chick">
     </section>
-    ${banner}${budgetCard}
+    ${budgetCard}
     ${list.length ? `<label class="search"><span aria-hidden="true">🔍</span><input type="search" placeholder="ค้นหารายการ" value="${esc(ui.search)}" data-input="search"></label>` : ''}
     ${Object.keys(groups).length ? Object.entries(groups).map(([d, items]) => `
       <section class="day">
@@ -263,48 +254,24 @@ function reviewRow(it, i) {
         <select data-rv="cat" data-i="${i}" aria-label="หมวด">${options}</select>
         <input type="date" value="${it.date}" data-rv="date" data-i="${i}" aria-label="วันที่">
       </div>
-      ${it.note ? `<small class="muted">${esc(it.note)}</small>` : ''}
+      <input type="text" class="rv-note" value="${esc(it.note || '')}" placeholder="หมายเหตุ (ไม่บังคับ)" data-rv="note" data-i="${i}" aria-label="หมายเหตุ">
     </div></li>`;
 }
 
 function viewSettings() {
-  const cfg = S.getFirebaseConfig();
   const expCats = cats().filter(c => c.type === 'expense'), incCats = cats().filter(c => c.type === 'income');
   const catChips = list => list.map(c => `<button class="chip edit" data-action="cat-edit" data-id="${c.id}" aria-label="แก้ไขหมวด ${esc(c.name)}">${c.emoji} ${esc(c.name)} <i aria-hidden="true">✎</i></button>`).join('');
   const missingDefaults = S.DEFAULT_CATEGORIES.filter(d => !cats().some(c => c.id === d.id)).length;
 
-  let account;
-  if (!cfg) {
-    account = `<p>ตอนนี้ข้อมูลเก็บ <b>ในเครื่องนี้เท่านั้น</b> หากต้องการซิงก์หลายเครื่อง ให้สร้างโปรเจกต์ Firebase (ฟรี) ตามคู่มือใน README แล้ววางค่า config ที่นี่</p>
-      <details><summary>วางค่า Firebase config</summary>
-        <textarea rows="7" data-input="fbcfg" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}'></textarea>
-        <button class="btn primary sm" data-action="fbcfg-save">บันทึกและเชื่อมต่อ</button>
-      </details>`;
-  } else if (state.user) {
-    account = `<div class="row between"><div><b>${esc(state.user.name || state.user.email)}</b><br><small class="muted">${esc(state.user.email || '')}</small></div>
+  const account = `<div class="row between"><div><b>${esc(state.user.name || state.user.email)}</b><br><small class="muted">${esc(state.user.email || '')}</small></div>
       <button class="btn ghost sm" data-action="signout">ออกจากระบบ</button></div>
       <p class="muted small">ล็อกอินบัญชีนี้บนเครื่องอื่น ข้อมูลจะตรงกันอัตโนมัติ · ใช้งานออฟไลน์ได้ แล้วซิงก์เมื่อกลับมาออนไลน์</p>`;
-  } else {
-    const up = ui.authMode === 'signup';
-    account = `<form class="auth" data-form="auth">
-        <input type="email" name="email" placeholder="อีเมล" autocomplete="email" required>
-        <input type="password" name="pw" placeholder="รหัสผ่าน (6 ตัวขึ้นไป)" autocomplete="${up ? 'new-password' : 'current-password'}" minlength="6" required>
-        ${ui.authError ? `<p class="err">${esc(ui.authError)}</p>` : ''}
-        <button class="btn primary" ${ui.authBusy ? 'disabled' : ''}>${ui.authBusy ? 'กำลังดำเนินการ…' : up ? 'สมัครบัญชีใหม่' : 'เข้าสู่ระบบ'}</button>
-        <button type="button" class="btn ghost" data-action="google">เข้าสู่ระบบด้วย Google</button>
-        <div class="row between small">${S.privateApp ? '<span></span>' : `<button type="button" class="link" data-action="auth-mode">${up ? 'มีบัญชีแล้ว? เข้าสู่ระบบ' : 'ยังไม่มีบัญชี? สมัครใหม่'}</button>`}
-        <button type="button" class="link" data-action="reset-pw">ลืมรหัสผ่าน</button></div>
-      </form>
-      ${state.syncStatus === 'error' ? `<p class="err">${esc(state.syncError)}</p>` : ''}`;
-  }
 
   return `${header('ตั้งค่า')}
     <section class="card"><h3>🔄 บัญชีและการซิงก์</h3>${account}</section>
 
     ${geminiCard()}
 
-    ${sheetCard()}
-    ${S.inviteOnly && state.isOwner ? ownerCard() : ''}
 
     <section class="card"><h3>🎯 งบประมาณรายเดือน</h3>
       <div class="row gap"><input type="number" inputmode="decimal" placeholder="เช่น 15000" value="${state.settings.budget || ''}" data-input="budget">
@@ -332,8 +299,8 @@ function viewSettings() {
         <button class="btn ghost sm" data-action="export-csv">ส่งออก CSV</button>
         <label class="btn ghost sm">นำเข้า JSON<input type="file" accept="application/json" data-input="import" hidden></label>
       </div>
-      <small class="muted">ทั้งหมด ${state.tx.length} รายการ${state.mode === 'cloud' ? ` · มีรูปสลิป ${state.tx.filter(t => t.hasSlip).length} รายการ` : ''}</small>
-      ${state.mode === 'cloud' ? `<label class="check"><input type="checkbox" data-input="keepslips" ${state.settings.keepSlips !== false ? 'checked' : ''}> เก็บรูปสลิปไว้ในแอป (ซิงก์ทุกเครื่อง กดดูได้จากรายการ)</label>` : ''}
+      <small class="muted">ทั้งหมด ${state.tx.length} รายการ · มีรูปสลิป ${state.tx.filter(t => t.hasSlip).length} รายการ</small>
+      <label class="check"><input type="checkbox" data-input="keepslips" ${state.settings.keepSlips !== false ? 'checked' : ''}> เก็บรูปสลิปไว้ในแอปตอนอ่านสลิป (ซิงก์ทุกเครื่อง กดดูได้จากรายการ)</label>
     </section>
 
     <section class="card"><h3>📖 วิธีใช้งาน</h3>
@@ -347,10 +314,10 @@ function viewSettings() {
     <p class="center muted small pad">TSK-MoneyNote v1.0</p>`;
 }
 
-// ---------- access gate (email not verified / not on the allow list) ----------
+// ---------- sign-in gate: the app is private to the owner's account ----------
 function viewGate() {
   const email = esc(state.user?.email || '');
-  if (S.privateApp && state.access === 'private') {
+  if (state.access === 'private') {
     return `<section class="onboard gate">
       <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔒</span></div>
       <h2>แอปส่วนตัว</h2>
@@ -358,64 +325,20 @@ function viewGate() {
       <button class="btn primary big" data-action="signout-now">ออกจากระบบ แล้วล็อกอินบัญชีเจ้าของ</button>
     </section>`;
   }
-  if (S.privateApp && state.mode !== 'cloud') {
-    return `<section class="onboard gate">
-      <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
-      <h2>เข้าสู่ระบบ TSK-MoneyNote</h2>
-      <p>แอปส่วนตัว · ล็อกอินด้วยบัญชีเดียวกันทุกเครื่อง ข้อมูลซิงก์ถึงกันหมด</p>
-      <button class="btn primary big" data-action="google">เข้าสู่ระบบด้วย Google</button>
-      <details class="more"><summary>เข้าสู่ระบบด้วยอีเมล</summary>
-        <form class="auth" data-form="auth">
-          <input type="email" name="email" placeholder="อีเมล" autocomplete="email" required>
-          <input type="password" name="pw" placeholder="รหัสผ่าน" autocomplete="current-password" required>
-          <button class="btn ghost" ${ui.authBusy ? 'disabled' : ''}>${ui.authBusy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button>
-        </form>
-      </details>
-      ${ui.authError ? `<p class="err">${esc(ui.authError)}</p>` : ''}
-      ${state.syncStatus === 'error' ? `<p class="err">${esc(state.syncError)}</p>` : ''}
-    </section>`;
-  }
-  const verify = state.access === 'verify';
   return `<section class="onboard gate">
-    <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">${verify ? '📧' : '🔒'}</span></div>
-    <h2>${verify ? 'ยืนยันอีเมลก่อนใช้งาน' : 'บัญชีนี้ยังไม่ได้รับอนุญาต'}</h2>
-    ${verify
-      ? `<p>TSK-MoneyNote ส่งลิงก์ยืนยันไปที่ <b>${email}</b> แล้ว เปิดอีเมล (ดูในโฟลเดอร์สแปมด้วย) กดลิงก์ แล้วกลับมากดปุ่มด้านล่าง</p>
-         <button class="btn primary big" data-action="gate-recheck">ยืนยันแล้ว เข้าใช้งาน</button>
-         <button class="btn ghost" data-action="gate-resend">ส่งอีเมลยืนยันอีกครั้ง</button>`
-      : `<p>แอปนี้เปิดให้เฉพาะคนที่เจ้าของแอปอนุญาต ส่งอีเมลนี้ให้เจ้าของแอปเพิ่มให้:</p>
-         <p class="gate-email">${email}</p>
-         <button class="btn primary big" data-action="gate-recheck">ได้รับอนุญาตแล้ว ลองอีกครั้ง</button>
-         <button class="btn ghost" data-action="gate-copy">📋 คัดลอกอีเมล</button>`}
-    <button class="link" data-action="signout">ออกจากระบบ / ใช้บัญชีอื่น</button>
-    ${ui.gateMsg ? `<p class="small muted">${esc(ui.gateMsg)}</p>` : ''}
-  </section>`;
-}
-
-// ---------- owner: who may use the app ----------
-const APP_URL = 'https://tunsupakorn.github.io/TSK-MoneyNote/';
-const TEMPLATE_URL = 'https://docs.google.com/spreadsheets/d/1IT8M4VotXmahde_1bo0Shdfwyem8lhZWQuTZL5uCnH8/copy';
-function inviteText(name) {
-  return `${name ? `สวัสดี ${name} ` : ''}ชวนมาใช้ "TSK-MoneyNote" แอปจดรายรับรายจ่าย อ่านสลิปให้อัตโนมัติ 🐣
-1) เปิด ${APP_URL} แล้วติดตั้งลงหน้าจอ (วิธีติดตั้ง: ${APP_URL}guide.html#sec-install)
-2) ตั้งค่า › สมัคร/เข้าสู่ระบบด้วย Google หรืออีเมลที่ให้ไว้
-3) (ไม่บังคับ) อยากได้ Google Sheet ของตัวเอง: ${TEMPLATE_URL.includes('TEMPLATE_ID') ? APP_URL + 'guide.html#sheet-template' : TEMPLATE_URL}`;
-}
-function ownerCard() {
-  const list = state.allowList;
-  return `<section class="card" id="access"><h3>👥 ใครใช้แอปได้บ้าง</h3>
-    <label class="check"><input type="checkbox" data-input="opensignup" ${state.openSignup ? 'checked' : ''}> เปิดให้ทุกคนที่มีลิงก์ใช้ได้</label>
-    <p class="muted small">${state.openSignup ? '⚠️ ตอนนี้ใครก็สมัครใช้ได้ (ข้อมูลยังแยกกันของใครของมัน)' : `🔒 ใช้ได้เฉพาะคุณ และอีเมลด้านล่าง (${list.length})`}</p>
-    <ul class="allow-list">${list.map(a => `<li><span><b>${esc(a.name || a.email)}</b>${a.name ? `<small>${esc(a.email)}</small>` : ''}</span>
-      <span class="row gap"><button class="link small" data-action="allow-invite" data-e="${esc(a.email)}">ข้อความชวน</button>
-      <button class="x" data-action="allow-remove" data-e="${esc(a.email)}" aria-label="เอาออก ${esc(a.email)}">×</button></span></li>`).join('')
-      || '<li class="muted small">ยังไม่มีใคร เพิ่มอีเมลของคนที่จะชวนได้เลย</li>'}</ul>
-    <form class="row gap wrap" data-form="allow">
-      <input name="email" type="email" placeholder="อีเมลของคนที่ชวน" required class="grow" autocomplete="off">
-      <input name="name" placeholder="ชื่อเล่น (ไม่บังคับ)" class="w-name" autocomplete="off">
-      <button class="btn primary sm">อนุญาต</button>
-    </form>
-    <small class="muted">คนที่สมัครด้วยอีเมล+รหัสผ่านต้องกดยืนยันอีเมลก่อน · บัญชี Google ใช้ได้ทันที</small>
+    <div class="ob-art"><img src="icons/icon.svg" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
+    <h2>เข้าสู่ระบบ TSK-MoneyNote</h2>
+    <p>แอปส่วนตัว · ล็อกอินด้วยบัญชีเดียวกันทุกเครื่อง ข้อมูลซิงก์ถึงกันหมด</p>
+    <button class="btn primary big" data-action="google">เข้าสู่ระบบด้วย Google</button>
+    <details class="more"><summary>เข้าสู่ระบบด้วยอีเมล</summary>
+      <form class="auth" data-form="auth">
+        <input type="email" name="email" placeholder="อีเมล" autocomplete="email" required>
+        <input type="password" name="pw" placeholder="รหัสผ่าน" autocomplete="current-password" required>
+        <button class="btn ghost" ${ui.authBusy ? 'disabled' : ''}>${ui.authBusy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button>
+      </form>
+    </details>
+    ${ui.authError ? `<p class="err">${esc(ui.authError)}</p>` : ''}
+    ${state.syncStatus === 'error' ? `<p class="err">${esc(state.syncError)}</p>` : ''}
   </section>`;
 }
 
@@ -467,45 +390,6 @@ async function saveGeminiKey(raw) {
   render();
 }
 
-function sheetCard() {
-  if (!Sheet.isConnected()) {
-    return `<section class="card" id="gsheet"><h3>📗 Google Sheet <small class="muted">(ไม่บังคับ)</small></h3>
-      <p class="muted small">เก็บสำเนาทุกรายการไว้ใน Google Sheet ของคุณเอง</p>
-      ${state.mode !== 'cloud' ? '<p class="small">🔐 ล็อกอินบัญชีก่อน แล้วค่อยเชื่อมชีต</p>' : ''}
-      <ol class="steps">
-        <li><a class="btn primary sm" href="${TEMPLATE_URL}" target="_blank" rel="noopener">① 📗 สร้างชีตของฉัน (กด “ทำสำเนา”) ↗</a></li>
-        <li><span class="small">② <b>บนคอมพิวเตอร์</b> เปิดชีตที่สร้าง › เมนู <b>🐣 TSK-MoneyNote › เชื่อมกับแอป</b> แล้วกดปุ่ม
-          <b>“เปิดแอปและเชื่อมต่อให้อัตโนมัติ”</b> — เสร็จ! ไม่ต้องคัดลอกลิงก์</span></li>
-      </ol>
-      <details class="more"><summary>มีลิงก์ web app อยู่แล้ว</summary>
-        <input type="url" placeholder="https://script.google.com/macros/s/…/exec" data-input="sheeturl" autocomplete="off">
-        <div class="row gap wrap"><button class="btn ghost sm" data-action="sheet-paste">📋 วางลิงก์</button>
-          <button class="btn primary sm" data-action="sheet-connect">เชื่อมต่อ</button></div>
-      </details>
-      ${Sheet.sheet.status === 'error' ? `<p class="err">${esc(Sheet.sheet.msg)}</p>` : ''}
-    </section>`;
-  }
-  const s = Sheet.sheet;
-  const time = s.at ? new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit' }).format(s.at) : '';
-  const line = s.status === 'syncing' ? '⏳ กำลังส่งข้อมูลลงชีต…'
-    : s.status === 'ok' ? `✅ ซิงก์ลงชีตแล้ว ${time} น. · ${s.rows} รายการ`
-    : s.status === 'error' ? `⚠️ ${esc(s.msg)}`
-    : state.cloudConfigured && state.syncStatus !== 'synced' ? '⏸️ รอซิงก์กับบัญชีให้เสร็จก่อน แล้วจะส่งลงชีตให้'
-    : '🟢 เชื่อมต่อแล้ว ข้อมูลจะถูกส่งลงชีตอัตโนมัติเมื่อมีการเปลี่ยนแปลง';
-  return `<section class="card compact" id="gsheet">
-    <div class="row between"><h3>📗 Google Sheet</h3>${s.status === 'error' ? '<span class="tag warn">มีปัญหา</span>' : '<span class="ok-pill">✅ เชื่อมแล้ว</span>'}</div>
-    <p class="small ${s.status === 'error' ? 'err' : 'muted'}">${line}</p>
-    <div class="row gap wrap">
-      ${Sheet.sheetUrl() ? `<a class="btn ghost sm" href="${esc(Sheet.sheetUrl())}" target="_blank" rel="noopener">📗 เปิดชีต</a>` : ''}
-    </div>
-    <details class="more"><summary>ตั้งค่าเพิ่มเติม</summary>
-      <div class="row gap wrap">
-        <button class="btn ghost sm" data-action="sheet-sync" ${s.status === 'syncing' ? 'disabled' : ''}>ซิงก์ตอนนี้</button>
-        <button class="btn ghost sm" data-action="sheet-disconnect">ยกเลิกการเชื่อม</button>
-      </div>
-    </details>
-  </section>`;
-}
 
 // ---------- category editor ----------
 let catDraft = null;
@@ -595,15 +479,31 @@ function renderSheet() {
     </div>
     <label class="lbl">โน้ต<input type="text" value="${esc(d.note || '')}" placeholder="เช่น ข้าวมันไก่ร้านประจำ" data-d="note"></label>
     ${d.merchant ? `<small class="muted">ผู้รับ: ${esc(d.merchant)}${d.ref ? ' · อ้างอิง ' + esc(d.ref) : ''}</small>` : ''}
-    ${d.hasSlip || /^https:\/\/drive\.google\.com\//.test(d.slipUrl || '') ? `<div class="row gap wrap">
-      ${d.hasSlip ? `<button type="button" class="btn ghost sm" data-action="view-slip" data-id="${esc(d.id)}">🧾 ดูสลิป</button>` : ''}
-      ${/^https:\/\/drive\.google\.com\//.test(d.slipUrl || '') ? `<a class="btn ghost sm" href="${esc(d.slipUrl)}" target="_blank" rel="noopener">📎 ดูใน Google Drive</a>` : ''}
-    </div>` : ''}
+    ${slipControls(d)}
     <div class="row gap">
       ${d.id ? `<button type="button" class="btn danger" data-action="d-delete">ลบ</button>` : ''}
       <button type="submit" class="btn primary big grow">บันทึก</button>
     </div>
   </form>`;
+}
+
+// Slip on an entry: view, attach, replace or remove. A new photo is saved when the entry is saved.
+function slipControls(d) {
+  const hasOld = d.hasSlip && !d.removeSlip;
+  const drive = /^https:\/\/drive\.google\.com\//.test(d.slipUrl || '')
+    ? `<a class="btn ghost sm" href="${esc(d.slipUrl)}" target="_blank" rel="noopener">📎 ดูใน Google Drive</a>` : '';
+  const pick = label => `<label class="btn ghost sm">${label}<input type="file" accept="image/*" data-input="slip-attach" hidden></label>`;
+  let body;
+  if (d.slipFile) {
+    body = `<span class="small">📎 ${esc(d.slipFile.name || 'รูปสลิป')} <span class="muted">· บันทึกเมื่อกด “บันทึก”</span></span>
+      ${pick('เลือกรูปใหม่')}<button type="button" class="link small" data-action="slip-unpick">ไม่แนบ</button>`;
+  } else if (hasOld) {
+    body = `<button type="button" class="btn ghost sm" data-action="view-slip" data-id="${esc(d.id)}">🧾 ดูสลิป</button>
+      ${pick('🔄 เปลี่ยนสลิป')}<button type="button" class="link small" data-action="slip-remove">ลบสลิป</button>`;
+  } else {
+    body = `${pick('📎 แนบสลิป')}${d.removeSlip ? '<span class="small muted">จะลบสลิปเมื่อกด “บันทึก”</span>' : ''}`;
+  }
+  return `<div class="slip-row row gap wrap">${body}${drive}</div>`;
 }
 
 // ---------- scan ----------
@@ -649,32 +549,6 @@ document.addEventListener('drop', e => {
   e.preventDefault(); zone.classList.remove('over');
   addToTray(e.dataTransfer?.files || []);
 });
-
-// One-click Sheet connect: the Sheet's 🐣 menu opens the app with #connect=<web app url>&key=<key>.
-// The fragment never reaches a server; it is kept until the account is ready, then removed from the address bar.
-function takeConnectLink() {
-  const m = location.hash.match(/^#connect=([^&]+)&key=([\w-]+)$/);
-  if (m) {
-    try { sessionStorage.setItem('jj_connect', JSON.stringify({ webapp: decodeURIComponent(m[1]), key: m[2] })); } catch {}
-    history.replaceState(null, '', location.pathname + location.search);
-  }
-  let pending = null;
-  try { pending = JSON.parse(sessionStorage.getItem('jj_connect') || 'null'); } catch {}
-  if (!pending) return;
-  ui.view = 'settings';
-  if (state.cloudConfigured && !(state.mode === 'cloud' && state.syncStatus === 'synced')) {
-    if (state.syncStatus === 'signed-out' && !takeConnectLink.told) { takeConnectLink.told = true; toast('ล็อกอินก่อน แล้ว TSK-MoneyNote จะเชื่อม Google Sheet ให้เอง'); render(); }
-    return; // try again once the account has loaded
-  }
-  try { sessionStorage.removeItem('jj_connect'); } catch {}
-  if (!confirm(`เชื่อม Google Sheet นี้กับบัญชี ${state.user?.email || 'นี้'}?\n(ถ้าเคยเชื่อมชีตอื่นไว้ จะเปลี่ยนมาใช้ชีตนี้แทน)`)) return render();
-  toast('กำลังเชื่อม Google Sheet…');
-  Sheet.connectWithKey(pending.webapp, pending.key)
-    .then(() => toast(Sheet.sheet.status === 'error' ? '⚠️ ' + Sheet.sheet.msg : 'เชื่อม Google Sheet แล้ว 📗'))
-    .catch(err => { Sheet.sheet.status = 'error'; Sheet.sheet.msg = err.message; })
-    .finally(() => render());
-}
-window.addEventListener('hashchange', takeConnectLink);
 
 // Files shared to the app (Android share sheet → "TSK-MoneyNote"): the service worker parks them in a cache.
 async function takeSharedFiles() {
@@ -736,7 +610,7 @@ async function compressSlip(file) {
 
 // Keep saved slip photos in Firestore in the background (PDF statements are not kept).
 let keepQueue = Promise.resolve();
-function keepSlips(pairs) {
+function keepSlips(pairs, announce = false) {
   pairs = pairs.filter(p => /^image\//.test(p.file?.type || ''));
   if (!pairs.length) return;
   keepQueue = keepQueue.then(async () => {
@@ -746,6 +620,7 @@ function keepSlips(pairs) {
       catch (e) { fail++; lastErr = e.message; console.warn('keep slip', e); }
     }
     if (fail) toast(`เก็บรูปสลิปได้ ${ok}/${pairs.length} (${lastErr})`);
+    else if (announce) toast('📎 แนบสลิปแล้ว');
   });
 }
 
@@ -819,9 +694,8 @@ function download(name, text, type) {
 function render() {
   const app = $('#app');
   const onboarding = !prefs.onboarded;
-  // private app: nothing is shown until the owner's account is signed in (wait quietly while Firebase starts)
-  const privateGate = S.privateApp && state.cloudConfigured && state.syncStatus !== 'local' && (state.mode !== 'cloud' || state.access !== 'ok');
-  const gated = privateGate || (state.mode === 'cloud' && state.access !== 'ok');
+  // private app: nothing is shown until the owner's account is signed in
+  const gated = state.mode !== 'cloud' || state.access !== 'ok';
   document.body.classList.toggle('no-nav', onboarding || gated);
   if (gated && !onboarding) { $('#app').innerHTML = viewGate(); return; }
   const keepScroll = window.scrollY;
@@ -849,6 +723,8 @@ document.addEventListener('click', async e => {
     case 'edit': return openSheet(state.tx.find(t => t.id === el.dataset.id));
     case 'close-sheet': return $('#sheet').close();
     case 'view-slip': return viewSlip(el.dataset.id);
+    case 'slip-unpick': delete draft.slipFile; return renderSheet();
+    case 'slip-remove': draft.removeSlip = true; delete draft.slipFile; return renderSheet();
     case 'close-slip': return $('#slipview').close();
     case 'month': {
       const [y, m] = ui.month.split('-').map(Number);
@@ -886,52 +762,11 @@ document.addEventListener('click', async e => {
       if (S.canKeepSlips() && state.settings.keepSlips !== false) keepSlips(pairs.filter(p => p.file));
       return;
     }
-    case 'upload-local': { const n = await S.uploadLocalToCloud(); return toast(`อัปขึ้นบัญชีแล้ว ${n} รายการ`); }
-    case 'discard-local': if (confirm('ไม่อัปข้อมูลในเครื่องนี้? (ข้อมูลในเครื่องจะถูกลบ)')) S.discardLocalPending(); return;
-    case 'auth-mode': ui.authMode = ui.authMode === 'signin' ? 'signup' : 'signin'; ui.authError = ''; return render();
     case 'google':
       try { await S.signInGoogle(); ui.authError = ''; toast('เข้าสู่ระบบแล้ว'); } catch (err) { ui.authError = err.message; render(); }
       return;
-    case 'reset-pw': {
-      const email = $('[data-form="auth"] [name="email"]')?.value;
-      if (!email) { ui.authError = 'กรอกอีเมลก่อน แล้วกด "ลืมรหัสผ่าน"'; return render(); }
-      try { await S.resetPassword(email); toast('ส่งลิงก์ตั้งรหัสใหม่ไปที่อีเมลแล้ว'); } catch (err) { ui.authError = err.message; render(); }
-      return;
-    }
     case 'signout': if (confirm('ออกจากระบบในเครื่องนี้?')) await S.signOut(); return;
     case 'signout-now': await S.signOut(); return;
-    case 'gate-recheck':
-      ui.gateMsg = 'กำลังตรวจสอบ…'; render();
-      try { await S.recheckAccess(); ui.gateMsg = state.access === 'ok' ? '' : (state.access === 'verify' ? 'ยังไม่ได้ยืนยันอีเมล ลองกดลิงก์ในอีเมลก่อน' : 'ยังไม่ได้รับอนุญาต'); }
-      catch (err) { ui.gateMsg = err.message; }
-      return render();
-    case 'gate-resend':
-      try { await S.resendVerification(); ui.gateMsg = 'ส่งอีเมลยืนยันอีกครั้งแล้ว'; } catch (err) { ui.gateMsg = err.message; }
-      return render();
-    case 'gate-copy':
-      try { await navigator.clipboard.writeText(state.user?.email || ''); toast('คัดลอกอีเมลแล้ว'); } catch { toast(state.user?.email || ''); }
-      return;
-    case 'allow-remove':
-      if (!confirm(`เอา ${el.dataset.e} ออกจากรายชื่อ? (ข้อมูลของเขายังอยู่ แต่จะเข้าใช้ไม่ได้)`)) return;
-      try { await S.removeEmail(el.dataset.e); toast('เอาออกแล้ว'); } catch (err) { toast('❌ ' + err.message); }
-      return;
-    case 'allow-invite': {
-      const a = state.allowList.find(x => x.email === el.dataset.e);
-      const text = inviteText(a?.name);
-      try { if (navigator.share) await navigator.share({ title: 'ชวนใช้ TSK-MoneyNote', text }); else { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว ส่งทาง LINE ได้เลย'); } }
-      catch (err) { if (err?.name !== 'AbortError') { try { await navigator.clipboard.writeText(text); toast('คัดลอกข้อความชวนแล้ว'); } catch { prompt('คัดลอกข้อความนี้', text); } } }
-      return;
-    }
-    case 'fbcfg-save': {
-      const raw = $('[data-input="fbcfg"]').value.trim();
-      try {
-        const jsonish = raw.replace(/^[^{]*/, '').replace(/[^}]*$/, '').replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"').replace(/,\s*}/, '}');
-        const cfg = JSON.parse(jsonish);
-        if (!cfg.apiKey || !cfg.projectId) throw new Error();
-        S.setFirebaseConfig(cfg); toast('บันทึกแล้ว กำลังเชื่อมต่อ…'); setTimeout(() => location.reload(), 600);
-      } catch { toast('รูปแบบ config ไม่ถูกต้อง'); }
-      return;
-    }
     case 'gtest':
       if (!geminiKey()) return toast('ใส่ key ก่อน');
       toast('กำลังทดสอบ…');
@@ -945,30 +780,6 @@ document.addEventListener('click', async e => {
     case 'gkey-save': return saveGeminiKey($('[data-input="gkey"]')?.value);
     case 'gkey-change': ui.editKey = true; ui.keyMsg = ''; return render();
     case 'gkey-cancel': ui.editKey = false; ui.keyMsg = ''; return render();
-    case 'sheet-connect': {
-      const url = $('[data-input="sheeturl"]').value;
-      el.disabled = true; el.textContent = 'กำลังเชื่อมต่อ…';
-      try { await Sheet.connect(url); toast('เชื่อม Google Sheet แล้ว 📗'); }
-      catch (err) { Sheet.sheet.status = 'error'; Sheet.sheet.msg = err.message; render(); }
-      return;
-    }
-    case 'sheet-paste': {
-      try {
-        const text = (await navigator.clipboard.readText()).trim();
-        const m = text.match(/#connect=([^&\s]+)&key=([\w-]+)/);
-        if (m) { location.hash = `connect=${m[1]}&key=${m[2]}`; return takeConnectLink(); }
-        $('[data-input="sheeturl"]').value = text;
-        if (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(text)) $('[data-action="sheet-connect"]').click();
-        else toast('ในคลิปบอร์ดไม่ใช่ลิงก์ web app');
-      } catch { toast('อ่านคลิปบอร์ดไม่ได้ ลองกดค้างในช่องแล้วเลือก “วาง”'); }
-      return;
-    }
-    case 'sheet-sync':
-      if (state.cloudConfigured && state.syncStatus !== 'synced') return toast('รอซิงก์กับบัญชีให้เสร็จก่อน');
-      return Sheet.syncNow(true);
-    case 'sheet-disconnect':
-      if (confirm('ยกเลิกการเชื่อม Google Sheet? (ข้อมูลในชีตเดิมยังอยู่ แต่จะไม่อัปเดตอีก)')) { Sheet.disconnect(); toast('ยกเลิกการเชื่อมแล้ว'); }
-      return;
     case 'budget-save': S.saveSettings({ budget: Math.max(0, Number($('[data-input="budget"]').value) || 0) }); return toast('บันทึกงบแล้ว');
     case 'cat-edit': return openCatEditor(el.dataset.id);
     case 'cat-new': return openCatEditor(null, el.dataset.t);
@@ -1002,25 +813,22 @@ document.addEventListener('submit', async e => {
   if (f === 'tx') {
     const amount = Number(draft.amount);
     if (!(amount > 0)) return toast('ใส่จำนวนเงินก่อน');
-    S.saveTx({ ...draft, amount: Math.round(amount * 100) / 100 });
+    const { slipFile, removeSlip, ...rest } = draft;
+    if (removeSlip && !slipFile) rest.hasSlip = false;
+    const saved = S.saveTx({ ...rest, amount: Math.round(amount * 100) / 100 });
     ui.month = draft.date.slice(0, 7);
     $('#sheet').close();
     toast(draft.id ? 'แก้ไขแล้ว' : 'จดแล้ว 🐣');
+    if (slipFile) keepSlips([{ tx: saved, file: slipFile }], true);
+    else if (removeSlip && draft.hasSlip) S.deleteSlipImage(saved.id).catch(err => toast('ลบสลิปไม่สำเร็จ: ' + err.message));
   } else if (f === 'auth') {
     const fd = new FormData(e.target);
     ui.authBusy = true; ui.authError = ''; render();
     try {
-      await (ui.authMode === 'signup' ? S.signUp : S.signIn)(fd.get('email'), fd.get('pw'));
+      await S.signIn(fd.get('email'), fd.get('pw'));
       toast('เข้าสู่ระบบแล้ว');
     } catch (err) { ui.authError = err.message; }
     ui.authBusy = false; render();
-  } else if (f === 'allow') {
-    const fd = new FormData(e.target);
-    try {
-      await S.allowEmail(fd.get('email'), fd.get('name'));
-      toast(`อนุญาต ${String(fd.get('email')).trim().toLowerCase()} แล้ว · กด “ข้อความชวน” เพื่อส่งลิงก์`);
-      e.target.reset();
-    } catch (err) { toast('❌ ' + err.message); }
   } else if (f === 'cat-edit') {
     const d = catDraft;
     d.name = d.name.trim();
@@ -1061,11 +869,14 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   switch (t.dataset.input) {
+    case 'slip-attach': {
+      const file = t.files[0]; t.value = '';
+      if (!file) return;
+      if (!/^image\//.test(file.type)) return toast('แนบได้เฉพาะรูปภาพ');
+      draft.slipFile = file; delete draft.removeSlip;
+      return renderSheet();
+    }
     case 'keepslips': S.saveSettings({ keepSlips: t.checked }); return toast(t.checked ? 'จะเก็บรูปสลิปไว้ในแอป' : 'ปิดการเก็บรูปสลิปในแอปแล้ว');
-    case 'opensignup':
-      if (t.checked && !confirm('เปิดให้ทุกคนที่มีลิงก์สมัครใช้ได้? (ข้อมูลยังแยกกันของใครของมัน)')) { t.checked = false; return; }
-      try { await S.setOpenSignup(t.checked); toast(t.checked ? 'เปิดให้ทุกคนใช้ได้แล้ว' : 'จำกัดเฉพาะอีเมลที่อนุญาตแล้ว'); } catch (err) { toast('❌ ' + err.message); }
-      return;
     case 'only30':
       ui.scan.only30 = t.checked;
       ui.scan.items.forEach(it => { if (!it.dup) it.keep = !(t.checked && it.old); });
@@ -1099,15 +910,12 @@ setModelChangeHandler(m => {
 });
 setFallbackHandler(m => toast(`รุ่นหลักคนใช้เยอะ ใช้ ${m} แทนชั่วคราว`));
 setStatusHandler(msg => { ui.scan.note = msg; if (ui.view === 'scan') render(); });
-Sheet.onSheetChange(() => { if (ui.view === 'settings') render(); });
 S.subscribe(() => {
   // a key saved only on this device (older version) is shared to the account once it is synced
   if (prefs.geminiKey && state.mode === 'cloud' && state.syncStatus === 'synced' && !state.settings.geminiKey) S.saveSettings({ geminiKey: prefs.geminiKey });
-  render(); Sheet.schedule();
-  if (state.mode === 'cloud' && state.syncStatus === 'synced' && sessionStorage.getItem?.('jj_connect')) setTimeout(takeConnectLink, 0);
+  render();
 });
 render();
 S.initStore();
 takeSharedFiles();
-takeConnectLink();
 if ('serviceWorker' in navigator && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(() => {});

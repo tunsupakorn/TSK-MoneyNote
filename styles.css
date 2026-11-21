@@ -322,3 +322,5 @@ form.row select { width: auto; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.slip-row { align-items: center; }
+.rv-note { width: 100%; margin-top: 6px; }

@@ -11,7 +11,3 @@ export const firebaseConfig = {
 
 // เจ้าของแอป: tun.supakorn1993@gmail.com
 export const ownerUid = "bccZ2Cvc0sYEY9VPt6BCyqIiU9R2";
-// true = แอปส่วนตัว ใช้ได้เฉพาะเจ้าของ (ต้องตรงกับ firestore.rules)
-export const privateApp = true;
-// true = เฉพาะอีเมลที่อนุญาต (ไม่ใช้เมื่อเป็นแอปส่วนตัว)
-export const inviteOnly = false;

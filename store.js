@@ -1,7 +1,6 @@
-// Data layer: works locally (localStorage) and switches to Firebase Firestore for multi-device sync.
-import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID, inviteOnly as INVITE_ONLY, privateApp as PRIVATE_APP } from './firebase-config.js';
-export const inviteOnly = !!INVITE_ONLY && !PRIVATE_APP;
-export const privateApp = !!PRIVATE_APP;
+// Data layer: Firebase Firestore, synced across devices and cached for offline use.
+// Private app: only the owner's account can use it, and data lives in Firebase Firestore.
+import { firebaseConfig as FILE_CONFIG, ownerUid as OWNER_UID } from './firebase-config.js';
 
 const FB_VERSION = '11.0.2';
 
@@ -56,18 +55,14 @@ function migrateSettings(s) {
 }
 
 export const state = {
-  mode: 'local',            // 'local' | 'cloud'
-  cloudConfigured: false,
-  syncStatus: 'local',      // local | signed-out | pending | synced | error
+  mode: 'signed-out',       // 'signed-out' | 'cloud'
+  syncStatus: 'signed-out', // signed-out | pending | synced | error
   syncError: '',
   user: null,
   tx: [],
   settings: defaultSettings(),
-  localPendingCount: 0,     // local items that can be uploaded after sign-in
-  access: 'ok',             // ok | verify (email not verified yet) | denied (email not on the allow list)
+  access: 'ok',             // ok | private (signed in with an account that is not the owner's)
   isOwner: false,
-  allowList: [],            // owner only: [{ email, name, addedAt }]
-  openSignup: false,        // owner only: anyone may use the app
 };
 
 import { DEFAULT_MODEL } from './gemini.js';
@@ -91,25 +86,9 @@ export const newId = () => Date.now().toString(36) + Math.random().toString(36).
 let fb = null;                 // { auth, db, A (auth module), F (firestore module) }
 let unsubs = [];
 
-export function getFirebaseConfig() { return LS.get('jj_fbconfig', null) || FILE_CONFIG; }
-export function setFirebaseConfig(cfg) { cfg ? LS.set('jj_fbconfig', cfg) : LS.del('jj_fbconfig'); }
-
-function loadLocal() {
-  state.tx = LS.get('jj_tx', []);
-  const saved = LS.get('jj_settings', {});
-  state.settings = { ...defaultSettings(), catVersion: saved.categories ? 1 : CAT_VERSION, ...saved };
-  if (migrateSettings(state.settings)) LS.set('jj_settings', state.settings);
-}
-
 export async function initStore() {
-  loadLocal();
   emit();
-  const cfg = getFirebaseConfig();
-  if (!cfg) return;
-  state.cloudConfigured = true;
-  state.syncStatus = 'signed-out';
-  emit();
-  try { await initFirebase(cfg); }
+  try { await initFirebase(FILE_CONFIG); }
   catch (e) { console.error(e); state.syncStatus = 'error'; state.syncError = e.message || String(e); emit(); }
 }
 
@@ -129,7 +108,7 @@ async function initFirebase(cfg) {
 function denied(err) {
   if (err?.code !== 'permission-denied') return false;
   unsubs.forEach(u => u()); unsubs = [];
-  state.access = 'denied';
+  state.access = 'private';
   state.tx = [];
   state.syncStatus = 'error';
   state.syncError = 'บัญชีนี้ยังไม่ได้รับอนุญาตให้ใช้แอป';
@@ -145,18 +124,9 @@ function attachUser(user) {
   state.user = { uid: user.uid, email: user.email, name: user.displayName, verified: user.emailVerified,
     provider: user.providerData?.[0]?.providerId || 'password' };
   state.access = 'ok';
-  state.localPendingCount = LS.get('jj_tx', []).length;
   // private app: only the owner's account may use it
-  if (PRIVATE_APP && !state.isOwner) {
+  if (!state.isOwner) {
     state.access = 'private';
-    state.syncStatus = 'signed-out';
-    state.tx = [];
-    emit();
-    return;
-  }
-  // accounts made with email + password must confirm the address first (Google accounts are already verified)
-  if (INVITE_ONLY && !state.isOwner && !user.emailVerified) {
-    state.access = 'verify';
     state.syncStatus = 'signed-out';
     state.tx = [];
     emit();
@@ -169,16 +139,6 @@ function attachUser(user) {
     state.syncStatus = snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'pending' : 'synced';
     emit();
   }, err => { if (!denied(err)) { state.syncStatus = 'error'; state.syncError = err.message; emit(); } }));
-  if (INVITE_ONLY && state.isOwner) {
-    unsubs.push(F.onSnapshot(F.collection(db, 'allow'), snap => {
-      state.allowList = snap.docs.map(d => ({ email: d.id, ...d.data() })).sort((a, b) => a.email.localeCompare(b.email));
-      emit();
-    }, err => console.warn('allow list', err)));
-    unsubs.push(F.onSnapshot(F.doc(db, 'config', 'access'), snap => {
-      state.openSignup = snap.exists() && snap.data().open === true;
-      emit();
-    }, err => console.warn('access', err)));
-  }
   unsubs.push(F.onSnapshot(F.doc(db, 'users', user.uid), snap => {
     const s = snap.exists() ? snap.data().settings : null;
     state.settings = { ...defaultSettings(), catVersion: s?.categories ? 1 : CAT_VERSION, ...(s || {}) };
@@ -190,59 +150,46 @@ function attachUser(user) {
 
 function detachUser() {
   unsubs.forEach(u => u()); unsubs = [];
-  state.mode = 'local';
+  state.mode = 'signed-out';
   state.user = null;
   state.access = 'ok';
   state.isOwner = false;
-  state.allowList = [];
-  state.syncStatus = state.cloudConfigured ? 'signed-out' : 'local';
-  loadLocal();
+  state.syncStatus = 'signed-out';
+  state.tx = [];
+  state.settings = defaultSettings();
   emit();
 }
 
 const clean = o => JSON.parse(JSON.stringify(o)); // drop undefined for Firestore
 const userPath = (...p) => [fb.db, 'users', state.user.uid, ...p];
 
-function writeLocal() { LS.set('jj_tx', state.tx); emit(); }
+function needCloud() { if (state.mode !== 'cloud') throw new Error('ต้องล็อกอินก่อน'); }
 
 export function saveTx(tx) {
   tx = { ...tx, id: tx.id || newId(), updatedAt: Date.now() };
   tx.createdAt ||= tx.updatedAt;
-  if (state.mode === 'cloud') {
-    fb.F.setDoc(fb.F.doc(...userPath('tx', tx.id)), clean(tx)).catch(syncFail);
-  } else {
-    const i = state.tx.findIndex(t => t.id === tx.id);
-    if (i >= 0) state.tx[i] = tx; else state.tx.push(tx);
-    writeLocal();
-  }
+  needCloud();
+  fb.F.setDoc(fb.F.doc(...userPath('tx', tx.id)), clean(tx)).catch(syncFail);
   return tx;
 }
 
 export async function saveMany(list) {
   const items = list.map(t => ({ ...t, id: t.id || newId(), createdAt: t.createdAt || Date.now(), updatedAt: Date.now() }));
-  if (state.mode === 'cloud') {
-    const { F, db } = fb;
-    for (let i = 0; i < items.length; i += 400) {
-      const b = F.writeBatch(db);
-      items.slice(i, i + 400).forEach(t => b.set(F.doc(...userPath('tx', t.id)), clean(t)));
-      b.commit().catch(syncFail);
-    }
-  } else {
-    const byId = new Map(state.tx.map(t => [t.id, t]));
-    items.forEach(t => byId.set(t.id, t));
-    state.tx = [...byId.values()];
-    writeLocal();
+  needCloud();
+  const { F, db } = fb;
+  for (let i = 0; i < items.length; i += 400) {
+    const b = F.writeBatch(db);
+    items.slice(i, i + 400).forEach(t => b.set(F.doc(...userPath('tx', t.id)), clean(t)));
+    b.commit().catch(syncFail);
   }
   return items.length;
 }
 
 export function deleteTx(id) {
-  if (state.mode === 'cloud') {
-    const hadSlip = state.tx.find(t => t.id === id)?.hasSlip;
-    fb.F.deleteDoc(fb.F.doc(...userPath('tx', id))).catch(syncFail);
-    if (hadSlip) fb.F.deleteDoc(fb.F.doc(...userPath('slips', id))).catch(e => console.warn('slip delete', e));
-  }
-  else { state.tx = state.tx.filter(t => t.id !== id); writeLocal(); }
+  needCloud();
+  const hadSlip = state.tx.find(t => t.id === id)?.hasSlip;
+  fb.F.deleteDoc(fb.F.doc(...userPath('tx', id))).catch(syncFail);
+  if (hadSlip) fb.F.deleteDoc(fb.F.doc(...userPath('slips', id))).catch(e => console.warn('slip delete', e));
 }
 
 // ---- slip images, kept in Firestore next to their entry: users/{uid}/slips/{txId} ----
@@ -253,6 +200,12 @@ export async function saveSlipImage(txId, { blob, width, height }) {
   const bytes = F.Bytes.fromUint8Array(new Uint8Array(await blob.arrayBuffer()));
   await F.setDoc(F.doc(...userPath('slips', txId)), { img: bytes, mime: blob.type || 'image/jpeg', width, height, size: blob.size, createdAt: Date.now() });
   await F.setDoc(F.doc(...userPath('tx', txId)), { hasSlip: true, updatedAt: Date.now() }, { merge: true });
+}
+export async function deleteSlipImage(txId) {
+  needCloud();
+  const { F } = fb;
+  await F.setDoc(F.doc(...userPath('tx', txId)), { hasSlip: false, updatedAt: Date.now() }, { merge: true });
+  await F.deleteDoc(F.doc(...userPath('slips', txId)));
 }
 // Returns an object URL for the slip image, or null if there is none.
 export async function loadSlipImage(txId) {
@@ -267,31 +220,18 @@ export async function loadSlipImage(txId) {
 export function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   if (state.mode === 'cloud') fb.F.setDoc(fb.F.doc(...userPath()), { settings: clean(state.settings) }, { merge: true }).catch(syncFail);
-  else LS.set('jj_settings', state.settings);
   emit();
 }
 
 function syncFail(e) { console.error(e); state.syncStatus = 'error'; state.syncError = e.message; emit(); }
 
-// Upload transactions saved on this device before signing in.
-export async function uploadLocalToCloud() {
-  const local = LS.get('jj_tx', []);
-  const n = await saveMany(local);
-  LS.del('jj_tx');
-  state.localPendingCount = 0;
-  emit();
-  return n;
-}
-export function discardLocalPending() { LS.del('jj_tx'); state.localPendingCount = 0; emit(); }
 
 // ---- auth ----
 const authMsg = e => ({
   'auth/invalid-email': 'อีเมลไม่ถูกต้อง',
   'auth/invalid-credential': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
   'auth/wrong-password': 'รหัสผ่านไม่ถูกต้อง',
-  'auth/user-not-found': 'ไม่พบบัญชีนี้ ลองกด "สมัครใหม่"',
-  'auth/email-already-in-use': 'อีเมลนี้มีบัญชีแล้ว ลองกด "เข้าสู่ระบบ"',
-  'auth/weak-password': 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัว',
+  'auth/user-not-found': 'ไม่พบบัญชีนี้',
   'auth/popup-blocked': 'เบราว์เซอร์บล็อกหน้าต่างล็อกอิน ลองใช้อีเมลแทน',
   'auth/popup-closed-by-user': 'ปิดหน้าต่างล็อกอินก่อนเสร็จ',
   'auth/unauthorized-domain': 'โดเมนนี้ยังไม่ได้เพิ่มใน Firebase > Authentication > Settings > Authorized domains',
@@ -302,37 +242,5 @@ const authMsg = e => ({
 
 function needFb() { if (!fb) throw new Error('ยังไม่ได้ตั้งค่า Firebase'); }
 export async function signIn(email, pw) { needFb(); try { await fb.A.signInWithEmailAndPassword(fb.auth, email, pw); } catch (e) { throw new Error(authMsg(e)); } }
-export async function signUp(email, pw) {
-  needFb();
-  try {
-    const cred = await fb.A.createUserWithEmailAndPassword(fb.auth, email, pw);
-    await fb.A.sendEmailVerification(cred.user).catch(() => {});
-  } catch (e) { throw new Error(authMsg(e)); }
-}
-export async function resendVerification() {
-  needFb();
-  if (!fb.auth.currentUser) return;
-  try { await fb.A.sendEmailVerification(fb.auth.currentUser); } catch (e) { throw new Error(authMsg(e)); }
-}
-// after clicking the link in the email: refresh the account and try again
-export async function recheckAccess() {
-  needFb();
-  const u = fb.auth.currentUser;
-  if (!u) return;
-  await u.reload();
-  await u.getIdToken(true);
-  attachUser(fb.auth.currentUser);
-}
-
-// ---- owner: who may use the app ----
-const emailKey = e => String(e || '').trim().toLowerCase();
-export async function allowEmail(email, name = '') {
-  const key = emailKey(email);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) throw new Error('อีเมลไม่ถูกต้อง');
-  await fb.F.setDoc(fb.F.doc(fb.db, 'allow', key), { name: String(name || '').trim(), addedAt: Date.now() });
-}
-export async function removeEmail(email) { await fb.F.deleteDoc(fb.F.doc(fb.db, 'allow', emailKey(email))); }
-export async function setOpenSignup(open) { await fb.F.setDoc(fb.F.doc(fb.db, 'config', 'access'), { open: !!open }, { merge: true }); }
 export async function signInGoogle() { needFb(); try { await fb.A.signInWithPopup(fb.auth, new fb.A.GoogleAuthProvider()); } catch (e) { throw new Error(authMsg(e)); } }
-export async function resetPassword(email) { needFb(); try { await fb.A.sendPasswordResetEmail(fb.auth, email); } catch (e) { throw new Error(authMsg(e)); } }
 export async function signOut() { if (fb) await fb.A.signOut(fb.auth); }
