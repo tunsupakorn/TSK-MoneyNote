@@ -36,8 +36,49 @@ export const DEFAULT_CATEGORIES = [
   { id: 'inc_other', name: 'อื่นๆ', emoji: '💰', type: 'income' },
 ];
 
+export const SHOP_CATEGORIES = [
+  { id: 'stock', name: 'ต้นทุนสินค้า/วัตถุดิบ', emoji: '📦', type: 'expense' },
+  { id: 'rent', name: 'ค่าเช่าร้าน', emoji: '🏠', type: 'expense' },
+  { id: 'staff', name: 'ค่าจ้างพนักงาน', emoji: '👥', type: 'expense' },
+  { id: 'utility', name: 'ค่าน้ำค่าไฟร้าน', emoji: '⚡', type: 'expense' },
+  { id: 'shipping', name: 'ค่าขนส่ง', emoji: '🚚', type: 'expense' },
+  { id: 'marketing', name: 'การตลาด/โฆษณา', emoji: '📣', type: 'expense' },
+  { id: 'equipment', name: 'อุปกรณ์ร้าน', emoji: '🔧', type: 'expense' },
+  { id: 'fee', name: 'ค่าธรรมเนียม', emoji: '🧾', type: 'expense' },
+  { id: 'exp_other', name: 'อื่นๆ', emoji: '📦', type: 'expense' },
+  { id: 'sales', name: 'ยอดขาย', emoji: '🏪', type: 'income' },
+  { id: 'inc_other', name: 'รายได้อื่น', emoji: '💰', type: 'income' },
+];
+export const INVEST_CATEGORIES = [
+  { id: 'buy', name: 'ซื้อหุ้น/กองทุน', emoji: '📈', type: 'expense' },
+  { id: 'fee', name: 'ค่าธรรมเนียม', emoji: '🧾', type: 'expense' },
+  { id: 'loss', name: 'ขาดทุน', emoji: '📉', type: 'expense' },
+  { id: 'exp_other', name: 'อื่นๆ', emoji: '📦', type: 'expense' },
+  { id: 'dividend', name: 'ปันผล', emoji: '💵', type: 'income' },
+  { id: 'interest', name: 'ดอกเบี้ย', emoji: '🏦', type: 'income' },
+  { id: 'gain', name: 'กำไรจากการขาย', emoji: '💹', type: 'income' },
+  { id: 'inc_other', name: 'รายได้อื่น', emoji: '💰', type: 'income' },
+];
+// Book kinds and their starting categories. 'personal' uses DEFAULT_CATEGORIES.
+export const BOOK_KINDS = {
+  personal: { name: 'ส่วนตัว', emoji: '👤', categories: DEFAULT_CATEGORIES },
+  shop: { name: 'ร้าน', emoji: '🏪', categories: SHOP_CATEGORIES },
+  invest: { name: 'ลงทุน', emoji: '📈', categories: INVEST_CATEGORIES },
+};
+export const newBook = (kind, id = kind) => ({ id, kind, name: BOOK_KINDS[kind].name, emoji: BOOK_KINDS[kind].emoji,
+  categories: BOOK_KINDS[kind].categories.map(c => ({ ...c })), budget: 0 });
+
 const CAT_VERSION = 2;
-const defaultSettings = () => ({ categories: DEFAULT_CATEGORIES, budget: 0, catVersion: CAT_VERSION, ownerNames: '' });
+const defaultSettings = () => ({ books: [newBook('personal'), newBook('shop'), newBook('invest')], catVersion: CAT_VERSION, ownerNames: '' });
+
+// Older settings had one category list + budget: they become the "ส่วนตัว" book, with shop and invest books added.
+function migrateBooks(s) {
+  if (Array.isArray(s.books) && s.books.length) return false;
+  const personal = { ...newBook('personal'), categories: s.categories || DEFAULT_CATEGORIES, budget: Number(s.budget || 0) };
+  s.books = [personal, newBook('shop'), newBook('invest')];
+  delete s.categories; delete s.budget;
+  return true;
+}
 
 // Bring a saved category list up to date (v2 adds bill categories); returns true if it changed.
 function migrateSettings(s) {
@@ -61,6 +102,7 @@ export const state = {
   user: null,
   tx: [],
   settings: defaultSettings(),
+  settingsReady: false,    // true once the account's settings have loaded from Firestore
   access: 'ok',             // ok | private (signed in with an account that is not the owner's)
   isOwner: false,
 };
@@ -139,11 +181,16 @@ function attachUser(user) {
     state.syncStatus = snap.metadata.hasPendingWrites || snap.metadata.fromCache ? 'pending' : 'synced';
     emit();
   }, err => { if (!denied(err)) { state.syncStatus = 'error'; state.syncError = err.message; emit(); } }));
+  state.settingsReady = false;
   unsubs.push(F.onSnapshot(F.doc(db, 'users', user.uid), snap => {
     const s = snap.exists() ? snap.data().settings : null;
+    state.settingsReady = true;
     state.settings = { ...defaultSettings(), catVersion: s?.categories ? 1 : CAT_VERSION, ...(s || {}) };
-    if (s && migrateSettings(state.settings) && !snap.metadata.fromCache)
-      F.setDoc(F.doc(db, 'users', user.uid), { settings: clean(state.settings) }, { merge: true }).catch(syncFail);
+    if (s?.categories || s?.budget !== undefined) delete state.settings.books; // old layout: rebuild books from it
+    const changed = [migrateSettings(state.settings), migrateBooks(state.settings)].some(Boolean);
+    // updateDoc replaces the whole settings map, so the old categories/budget keys are dropped
+    if (s && changed && !snap.metadata.fromCache)
+      F.updateDoc(F.doc(db, 'users', user.uid), { settings: clean(state.settings) }).catch(syncFail);
     emit();
   }, err => { if (!denied(err)) console.warn(err); }));
 }
@@ -157,6 +204,7 @@ function detachUser() {
   state.syncStatus = 'signed-out';
   state.tx = [];
   state.settings = defaultSettings();
+  state.settingsReady = false;
   emit();
 }
 
@@ -219,7 +267,13 @@ export async function loadSlipImage(txId) {
 
 export function saveSettings(patch) {
   state.settings = { ...state.settings, ...patch };
-  if (state.mode === 'cloud') fb.F.setDoc(fb.F.doc(...userPath()), { settings: clean(state.settings) }, { merge: true }).catch(syncFail);
+  if (state.mode === 'cloud') {
+    const ref = fb.F.doc(...userPath());
+    // before the saved settings have loaded, only merge the changed keys so nothing else is overwritten
+    if (!state.settingsReady) fb.F.setDoc(ref, { settings: clean(patch) }, { merge: true }).catch(syncFail);
+    else fb.F.updateDoc(ref, { settings: clean(state.settings) })
+      .catch(() => fb.F.setDoc(ref, { settings: clean(state.settings) }, { merge: true }).catch(syncFail));
+  }
   emit();
 }
 

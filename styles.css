@@ -328,3 +328,12 @@ form.row select { width: auto; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .slip-row { align-items: center; }
 .rv-note { width: 100%; margin-top: 6px; }
+
+/* books */
+.book-bar { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+.book-bar::-webkit-scrollbar { display: none; }
+.book-chip { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 99px; padding: 6px 14px; font-weight: 500; cursor: pointer; }
+.book-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.hero-move { display: block; margin-top: 10px; font-size: .8rem; opacity: .85; position: relative; z-index: 1; }
+.scan-book { margin-bottom: 4px; }
+.chip small { margin-left: 2px; }

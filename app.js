@@ -25,19 +25,34 @@ const ui = {
   authBusy: false,
   authError: '',
   obStep: 0,
+  book: prefs.book || 'personal', // current book on this device, or 'all'
+  setBook: '',                     // book whose categories/budget the settings page edits
+  scanBook: '',                    // book that read slips are saved into
 };
 
-const cats = () => state.settings.categories || S.DEFAULT_CATEGORIES;
+// ---- books (ส่วนตัว / ร้าน / ลงทุน …): each has its own categories and budget ----
+const books = () => state.settings.books?.length ? state.settings.books : [S.newBook('personal')];
+const bookById = id => books().find(b => b.id === id) || null;
+const txBook = t => t.book || 'personal';
+const isAll = () => ui.book === 'all';
+const workBook = () => (!isAll() && bookById(ui.book)) || books()[0];   // book for new entries
+const bookLabel = id => { const b = bookById(id); return b ? `${b.emoji} ${b.name}` : 'ไม่ระบุบัญชี'; };
+const cats = (bookId = workBook().id) => bookById(bookId)?.categories || S.DEFAULT_CATEGORIES;
+function saveBook(id, patch) { S.saveSettings({ books: books().map(b => b.id === id ? { ...b, ...patch } : b) }); }
 // Gemini key: this device first, else the one synced with your account (enter once, every device gets it)
 const geminiKey = () => prefs.geminiKey || state.settings.geminiKey || '';
 const TRANSFER_CAT ={ id: 'transfer', name: 'ย้ายเงิน', emoji: '🔄', type: 'transfer' };
-const catById = id => id === 'transfer' ? TRANSFER_CAT : cats().find(c => c.id === id) || { id, name: 'ไม่ระบุ', emoji: '❔', type: 'expense' };
+const catById = (id, bookId) => id === 'transfer' ? TRANSFER_CAT : cats(bookId).find(c => c.id === id) || { id, name: 'ไม่ระบุ', emoji: '❔', type: 'expense' };
 const SIGN = { expense: '−', income: '+', transfer: '↔ ' };
 const EMOJIS = ['🍜', '🍱', '🧋', '☕', '🍺', '🛒', '🛍️', '👕', '💄', '🚕', '🚗', '⛽', '🏍️', '🚇', '✈️', '🏠', '⚡', '🚰', '🌐', '📱', '🧾', '💊', '🏥', '🐶', '👶', '🎮', '🎬', '🎵', '📚', '🎓', '🏋️', '💇', '🎁', '❤️', '🙏', '💼', '🏪', '📈', '💰', '🔁', '🏦', '💳', '🧴', '🧹', '🔧', '📦'];
 // owner names for spotting transfers between your own accounts: what you typed + your account name
 const ownerNames = () => [...String(state.settings.ownerNames || '').split(/[,\n]/), state.user?.name || '']
   .map(s => s.trim()).filter(s => s.length > 1);
-const monthTx = () => state.tx.filter(t => t.date?.startsWith(ui.month));
+// entries of the month in the current book (a move between books shows in both), or in every book
+const inBook = t => isAll() || txBook(t) === ui.book || t.toBook === ui.book;
+const monthTx = () => state.tx.filter(t => t.date?.startsWith(ui.month) && inBook(t));
+// money moved between books, seen from the current book: +1 in / -1 out (0 in the all-books view)
+const moveDir = t => t.type !== 'transfer' || !t.toBook || t.toBook === txBook(t) || isAll() ? 0 : t.toBook === ui.book ? 1 : -1;
 const sum = (list, type) => list.filter(t => t.type === type).reduce((s, t) => s + Number(t.amount || 0), 0);
 
 function toast(msg) {
@@ -64,6 +79,11 @@ function header(title) {
     <button class="sync ${cls}" data-nav="settings" title="สถานะการซิงก์"><i></i>${label}</button>
   </header>`;
 }
+function bookBar() {
+  if (books().length < 2) return '';
+  const chip = (id, label) => `<button class="book-chip ${ui.book === id ? 'on' : ''}" data-action="book" data-b="${esc(id)}">${label}</button>`;
+  return `<nav class="book-bar" aria-label="เลือกบัญชี">${chip('all', '📚 รวม')}${books().map(b => chip(b.id, `${b.emoji} ${esc(b.name)}`)).join('')}</nav>`;
+}
 function monthSwitch() {
   return `<div class="month">
     <button class="icon-btn" data-action="month" data-d="-1" aria-label="เดือนก่อน">‹</button>
@@ -72,12 +92,16 @@ function monthSwitch() {
   </div>`;
 }
 function txRow(t) {
-  const c = catById(t.cat);
-  const sub = [t.merchant, t.note].filter(Boolean).join(' · ');
+  const c = catById(t.cat, txBook(t));
+  const cross = t.type === 'transfer' && t.toBook && t.toBook !== txBook(t);
+  const where = cross ? `${bookLabel(txBook(t))} → ${bookLabel(t.toBook)}` : isAll() && books().length > 1 ? bookLabel(txBook(t)) : '';
+  const sub = [where, t.merchant, t.note].filter(Boolean).join(' · ');
+  const dir = moveDir(t);
+  const sign = dir > 0 ? '+' : dir < 0 ? '−' : SIGN[t.type] || '';
   return `<li><button class="tx" data-action="edit" data-id="${esc(t.id)}">
     <span class="bubble" aria-hidden="true">${c.emoji}</span>
     <span class="tx-main"><b>${esc(c.name)}</b><small>${esc(sub || METHODS[t.method] || '')}</small></span>
-    <span class="tx-amt num ${t.type}">${t.hasSlip || t.slipUrl ? '<i class="clip" title="มีรูปสลิป">📎</i>' : ''}${SIGN[t.type] || ''}${baht(t.amount)}</span>
+    <span class="tx-amt num ${dir > 0 ? 'income' : dir < 0 ? 'expense' : t.type}">${t.hasSlip || t.slipUrl ? '<i class="clip" title="มีรูปสลิป">📎</i>' : ''}${sign}${baht(t.amount)}</span>
   </button></li>`;
 }
 
@@ -107,9 +131,12 @@ function viewOnboarding() {
 function viewHome() {
   const list = monthTx();
   const inc = sum(list, 'income'), exp = sum(list, 'expense');
-  const budget = Number(state.settings.budget || 0);
+  const moveIn = list.filter(t => moveDir(t) > 0).reduce((a, t) => a + Number(t.amount || 0), 0);
+  const moveOut = list.filter(t => moveDir(t) < 0).reduce((a, t) => a + Number(t.amount || 0), 0);
+  const balance = inc - exp + moveIn - moveOut;
+  const budget = isAll() ? 0 : Number(workBook().budget || 0);
   const q = ui.search.trim().toLowerCase();
-  const shown = list.filter(t => !q || [catById(t.cat).name, t.merchant, t.note, String(t.amount)].join(' ').toLowerCase().includes(q))
+  const shown = list.filter(t => !q || [catById(t.cat, txBook(t)).name, t.merchant, t.note, String(t.amount)].join(' ').toLowerCase().includes(q))
     .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')) || (b.createdAt || 0) - (a.createdAt || 0));
   const groups = {};
   shown.forEach(t => (groups[t.date] ||= []).push(t));
@@ -129,14 +156,15 @@ function viewHome() {
     </section>`;
   }
 
-  return `${header()}${monthSwitch()}
+  return `${header()}${bookBar()}${monthSwitch()}
     <section class="hero">
-      <span class="hero-label">คงเหลือ</span>
-      <div class="hero-num num">${inc - exp < 0 ? '−' : ''}${baht(Math.abs(inc - exp))}</div>
+      <span class="hero-label">คงเหลือ${books().length > 1 ? ` · ${isAll() ? '📚 รวมทุกบัญชี' : bookLabel(ui.book)}` : ''}</span>
+      <div class="hero-num num">${balance < 0 ? '−' : ''}${baht(Math.abs(balance))}</div>
       <div class="hero-split">
         <div><small>รายรับ</small><b class="num">${baht(inc)}</b></div>
         <div><small>รายจ่าย</small><b class="num">${baht(exp)}</b></div>
       </div>
+      ${moveIn || moveOut ? `<small class="hero-move">ย้ายระหว่างบัญชี${moveIn ? ` · เข้า +${baht(moveIn)}` : ''}${moveOut ? ` · ออก −${baht(moveOut)}` : ''}</small>` : ''}
       <img src="icons/icon-512.png" alt="" class="hero-logo">
     </section>
     ${budgetCard}
@@ -158,8 +186,11 @@ function viewStats() {
   const list = monthTx();
   const type = ui.statsType;
   const byCat = {};
-  list.filter(t => t.type === type).forEach(t => byCat[t.cat] = (byCat[t.cat] || 0) + Number(t.amount));
-  const rows = Object.entries(byCat).map(([id, amount]) => ({ ...catById(id), amount })).sort((a, b) => b.amount - a.amount);
+  list.filter(t => t.type === type).forEach(t => { const k = txBook(t) + '|' + t.cat; byCat[k] = (byCat[k] || 0) + Number(t.amount); });
+  const rows = Object.entries(byCat).map(([k, amount]) => {
+    const [b, id] = k.split('|'); const c = catById(id, b);
+    return { ...c, id: k, name: isAll() && books().length > 1 ? `${bookById(b)?.emoji || ''} ${c.name}` : c.name, amount };
+  }).sort((a, b) => b.amount - a.amount);
   const [y, m] = ui.month.split('-').map(Number);
   const days = new Date(y, m, 0).getDate();
   const values = Array(days).fill(0);
@@ -171,7 +202,7 @@ function viewStats() {
   const methods = {};
   list.filter(t => t.type === type).forEach(t => methods[t.method || 'cash'] = (methods[t.method || 'cash'] || 0) + Number(t.amount));
 
-  return `${header('สรุป')}${monthSwitch()}
+  return `${header('สรุป')}${bookBar()}${monthSwitch()}
     <div class="seg" role="tablist">
       <button role="tab" aria-selected="${type === 'expense'}" data-action="stats-type" data-t="expense">รายจ่าย</button>
       <button role="tab" aria-selected="${type === 'income'}" data-action="stats-type" data-t="income">รายรับ</button>
@@ -196,6 +227,8 @@ function viewScan() {
   return `${header('อ่านสลิป')}
     ${!hasKey ? `<section class="card notice"><p>🔑 ต้องใส่ Gemini API key ก่อน (ฟรี) เพื่อให้ TSK-MoneyNote อ่านสลิปได้</p>
       <button class="btn primary sm" data-action="goto-gemini">ไปใส่ key</button></section>` : ''}
+    ${books().length > 1 ? `<label class="lbl scan-book">จดลงบัญชี<select data-input="scanbook">${books().map(b =>
+      `<option value="${esc(b.id)}" ${b.id === scanBook() ? 'selected' : ''}>${b.emoji} ${esc(b.name)}</option>`).join('')}</select></label>` : ''}
     <section class="pick ${off}" data-drop>
       <label class="pick-main">
         <input type="file" accept="image/*" multiple data-input="pick" ${off}>
@@ -238,9 +271,10 @@ function viewScan() {
     </ul><a class="link" href="guide.html#sec-slip">📖 ดูวิธีใช้แบบละเอียด</a></section>`;
 }
 
+function scanBook() { return bookById(ui.scanBook)?.id || workBook().id; }
 function reviewRow(it, i) {
   const options = it.type === 'transfer' ? `<option value="transfer">🔄 ย้ายเงิน (ไม่นับรายรับ/รายจ่าย)</option>`
-    : cats().filter(c => c.type === it.type).map(c => `<option value="${c.id}" ${c.id === it.cat ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('');
+    : cats(scanBook()).filter(c => c.type === it.type).map(c => `<option value="${c.id}" ${c.id === it.cat ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('');
   return `<li class="rv ${it.keep ? '' : 'off'}">
     <label class="rv-check"><input type="checkbox" data-rv="keep" data-i="${i}" ${it.keep ? 'checked' : ''} aria-label="เลือกรายการ"></label>
     <div class="rv-body">
@@ -258,10 +292,15 @@ function reviewRow(it, i) {
     </div></li>`;
 }
 
+function setBook() { return bookById(ui.setBook) || workBook(); }
 function viewSettings() {
-  const expCats = cats().filter(c => c.type === 'expense'), incCats = cats().filter(c => c.type === 'income');
+  const sb = setBook();
+  const expCats = cats(sb.id).filter(c => c.type === 'expense'), incCats = cats(sb.id).filter(c => c.type === 'income');
+  const bookPick = books().length > 1 ? `<label class="lbl">บัญชี<select data-input="setbook">${books().map(b =>
+    `<option value="${esc(b.id)}" ${b.id === sb.id ? 'selected' : ''}>${b.emoji} ${esc(b.name)}</option>`).join('')}</select></label>` : '';
   const catChips = list => list.map(c => `<button class="chip edit" data-action="cat-edit" data-id="${c.id}" aria-label="แก้ไขหมวด ${esc(c.name)}">${c.emoji} ${esc(c.name)} <i aria-hidden="true">✎</i></button>`).join('');
-  const missingDefaults = S.DEFAULT_CATEGORIES.filter(d => !cats().some(c => c.id === d.id)).length;
+  const presets = (S.BOOK_KINDS[sb.kind] || S.BOOK_KINDS.personal).categories;
+  const missingDefaults = presets.filter(d => !cats(sb.id).some(c => c.id === d.id)).length;
 
   const account = `<div class="row between"><div><b>${esc(state.user.name || state.user.email)}</b><br><small class="muted">${esc(state.user.email || '')}</small></div>
       <button class="btn ghost sm" data-action="signout">ออกจากระบบ</button></div>
@@ -273,14 +312,24 @@ function viewSettings() {
     ${geminiCard()}
 
 
+    <section class="card" id="books"><h3>📚 บัญชี</h3>
+      <p class="muted small">แยกจดได้หลายบัญชี เช่น ส่วนตัว ร้าน ลงทุน · แต่ละบัญชีมีหมวดและงบของตัวเอง แตะเพื่อเปลี่ยนชื่อหรือลบ</p>
+      <div class="chips">${books().map(b => `<button class="chip edit" data-action="book-edit" data-b="${esc(b.id)}">${b.emoji} ${esc(b.name)}
+        <small class="muted">${state.tx.filter(t => txBook(t) === b.id).length}</small> <i aria-hidden="true">✎</i></button>`).join('')}</div>
+      <div class="row gap wrap">${Object.entries(S.BOOK_KINDS).map(([k, v]) =>
+        `<button class="btn ghost sm" data-action="book-new" data-k="${k}">+ ${v.emoji} บัญชี${k === 'personal' ? 'ทั่วไป' : v.name}</button>`).join('')}</div>
+    </section>
+
     <section class="card"><h3>🎯 งบประมาณรายเดือน</h3>
-      <div class="row gap"><input type="number" inputmode="decimal" placeholder="เช่น 15000" value="${state.settings.budget || ''}" data-input="budget">
+      ${bookPick}
+      <div class="row gap"><input type="number" inputmode="decimal" placeholder="เช่น 15000" value="${sb.budget || ''}" data-input="budget">
       <button class="btn primary sm" data-action="budget-save">บันทึก</button></div>
-      <small class="muted">ใส่ 0 เพื่อปิดการแสดงงบ</small>
+      <small class="muted">งบของบัญชี ${esc(sb.emoji + ' ' + sb.name)} · ใส่ 0 เพื่อปิดการแสดงงบ</small>
     </section>
 
     <section class="card" id="cats"><h3>🗂️ หมวดหมู่</h3>
-      <p class="muted small">แตะหมวดเพื่อเปลี่ยนชื่อ อีโมจิ ลำดับ หรือลบ</p>
+      ${bookPick}
+      <p class="muted small">หมวดของบัญชี ${esc(sb.emoji + ' ' + sb.name)} · แตะหมวดเพื่อเปลี่ยนชื่อ อีโมจิ ลำดับ หรือลบ</p>
       <div class="row between"><small class="muted">รายจ่าย (${expCats.length})</small><button class="link small" data-action="cat-new" data-t="expense">+ เพิ่มหมวดรายจ่าย</button></div>
       <div class="chips">${catChips(expCats)}</div>
       <div class="row between"><small class="muted">รายรับ (${incCats.length})</small><button class="link small" data-action="cat-new" data-t="income">+ เพิ่มหมวดรายรับ</button></div>
@@ -394,16 +443,17 @@ async function saveGeminiKey(raw) {
 // ---------- category editor ----------
 let catDraft = null;
 function openCatEditor(id, type) {
-  const c = id && cats().find(x => x.id === id);
-  catDraft = c ? { ...c, isNew: false } : { id: 'c_' + S.newId(), name: '', emoji: type === 'income' ? '💰' : '🏷️', type, isNew: true };
+  const bookId = setBook().id;
+  const c = id && cats(bookId).find(x => x.id === id);
+  catDraft = c ? { ...c, bookId, isNew: false } : { id: 'c_' + S.newId(), name: '', emoji: type === 'income' ? '💰' : '🏷️', type, bookId, isNew: true };
   renderCatEditor();
   if (!$('#sheet').open) $('#sheet').showModal();
 }
 function renderCatEditor() {
   const d = catDraft;
-  const same = cats().filter(c => c.type === d.type);
+  const same = cats(d.bookId).filter(c => c.type === d.type);
   const pos = same.findIndex(c => c.id === d.id);
-  const used = state.tx.filter(t => t.cat === d.id).length;
+  const used = state.tx.filter(t => t.cat === d.id && txBook(t) === d.bookId).length;
   $('#sheet').innerHTML = `<form method="dialog" class="sheet-body" data-form="cat-edit">
     <div class="grab" aria-hidden="true"></div>
     <div class="row between"><h2>${d.isNew ? 'เพิ่มหมวด' : 'แก้ไขหมวด'}${d.type === 'income' ? 'รายรับ' : 'รายจ่าย'}</h2>
@@ -423,41 +473,73 @@ function renderCatEditor() {
     </div>
   </form>`;
 }
-function deleteCategory(id) {
-  const c = cats().find(x => x.id === id);
-  const same = cats().filter(x => x.type === c.type && x.id !== id);
+function deleteCategory(id, bookId) {
+  const c = cats(bookId).find(x => x.id === id);
+  const same = cats(bookId).filter(x => x.type === c.type && x.id !== id);
   if (!same.length) return toast('ต้องมีอย่างน้อย 1 หมวด');
   const other = same.find(x => x.id === (c.type === 'income' ? 'inc_other' : 'exp_other')) || same[same.length - 1];
-  const used = state.tx.filter(t => t.cat === id);
+  const used = state.tx.filter(t => t.cat === id && txBook(t) === bookId);
   const msg = used.length ? `ลบหมวด "${c.name}"? รายการ ${used.length} รายการในหมวดนี้จะย้ายไปหมวด "${other.name}"` : `ลบหมวด "${c.name}"?`;
   if (!confirm(msg)) return;
   if (used.length) S.saveMany(used.map(t => ({ ...t, cat: other.id })));
-  S.saveSettings({ categories: cats().filter(x => x.id !== id) });
+  saveBook(bookId, { categories: cats(bookId).filter(x => x.id !== id) });
   $('#sheet').close();
   toast('ลบหมวดแล้ว');
 }
-function moveCategory(id, dir) {
-  const list = [...cats()];
+function moveCategory(id, dir, bookId) {
+  const list = [...cats(bookId)];
   const i = list.findIndex(c => c.id === id);
   let j = i + dir;
   while (j >= 0 && j < list.length && list[j].type !== list[i].type) j += dir;
   if (j < 0 || j >= list.length) return;
   [list[i], list[j]] = [list[j], list[i]];
-  S.saveSettings({ categories: list });
+  saveBook(bookId, { categories: list });
   renderCatEditor();
+}
+
+// ---------- book editor ----------
+let bookDraft = null;
+function openBookEditor(id, kind) {
+  const b = id && bookById(id);
+  bookDraft = b ? { id: b.id, name: b.name, emoji: b.emoji, isNew: false }
+    : { ...S.newBook(kind, 'b_' + S.newId()), isNew: true };
+  renderBookEditor();
+  if (!$('#sheet').open) $('#sheet').showModal();
+}
+function renderBookEditor() {
+  const d = bookDraft;
+  const used = d.isNew ? 0 : state.tx.filter(t => txBook(t) === d.id || t.toBook === d.id).length;
+  $('#sheet').innerHTML = `<form method="dialog" class="sheet-body" data-form="book-edit">
+    <div class="grab" aria-hidden="true"></div>
+    <div class="row between"><h2>${d.isNew ? 'เพิ่มบัญชี' : 'แก้ไขบัญชี'}</h2>
+      <button type="button" class="icon-btn" data-action="close-sheet" aria-label="ปิด">✕</button></div>
+    <div class="row gap">
+      <input class="w-emoji ce-emoji" value="${esc(d.emoji)}" data-be="emoji" maxlength="8" aria-label="อีโมจิ">
+      <input class="grow" value="${esc(d.name)}" data-be="name" placeholder="ชื่อบัญชี เช่น ร้านกาแฟ" required maxlength="30" aria-label="ชื่อบัญชี">
+    </div>
+    <div class="emoji-grid" role="group" aria-label="เลือกอีโมจิ">${['👤', '🏪', '📈', '☕', '🍜', '🛍️', '🏠', '🚗', '👨‍👩‍👧', '🎓', '💼', '🐷', '🏦', '💳', '🌾', '🛠️']
+      .map(e => `<button type="button" class="${e === d.emoji ? 'on' : ''}" data-action="be-emoji" data-e="${e}">${e}</button>`).join('')}</div>
+    ${d.isNew ? '<p class="muted small">บัญชีใหม่จะมีหมวดเริ่มต้นตามประเภทที่เลือก แก้ได้ภายหลังในการ์ดหมวดหมู่</p>'
+      : `<small class="muted">${used ? `มี ${used} รายการในบัญชีนี้ · ลบบัญชีได้เมื่อไม่มีรายการแล้ว` : 'ยังไม่มีรายการในบัญชีนี้'}</small>`}
+    <div class="row gap">
+      ${d.isNew || books().length < 2 ? '' : `<button type="button" class="btn danger" data-action="book-delete" ${used ? 'disabled' : ''}>ลบบัญชี</button>`}
+      <button type="submit" class="btn primary big grow">${d.isNew ? 'เพิ่มบัญชี' : 'บันทึก'}</button>
+    </div>
+  </form>`;
 }
 
 // ---------- add / edit sheet ----------
 let draft = null;
 function openSheet(tx) {
-  draft = tx ? { ...tx } : { type: 'expense', amount: '', cat: 'food', date: todayISO(), note: '', method: 'cash', source: 'manual' };
+  draft = tx ? { ...tx, book: txBook(tx) } : { type: 'expense', amount: '', cat: 'food', date: todayISO(), note: '', method: 'cash', source: 'manual', book: workBook().id };
   renderSheet();
   $('#sheet').showModal();
   if (!tx) setTimeout(() => $('#sheet [data-d="amount"]')?.focus(), 60);
 }
 function renderSheet() {
   const d = draft;
-  const list = d.type === 'transfer' ? [] : cats().filter(c => c.type === d.type);
+  const list = d.type === 'transfer' ? [] : cats(d.book).filter(c => c.type === d.type);
+  const bookOpts = (sel, skip) => books().filter(b => b.id !== skip).map(b => `<option value="${esc(b.id)}" ${b.id === sel ? 'selected' : ''}>${b.emoji} ${esc(b.name)}</option>`).join('');
   if (d.type === 'transfer') d.cat = 'transfer';
   else if (!list.some(c => c.id === d.cat)) d.cat = list[0]?.id;
   $('#sheet').innerHTML = `<form method="dialog" class="sheet-body" data-form="tx">
@@ -470,9 +552,13 @@ function renderSheet() {
     </div>
     <label class="amount ${d.type}"><span>฿</span><input type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" value="${d.amount}" data-d="amount" required aria-label="จำนวนเงิน"></label>
     ${d.type === 'transfer'
-      ? `<p class="g-note">🔄 โอนระหว่างบัญชีของคุณเอง หรือชำระบัตรเครดิต · <b>ไม่นับ</b>เป็นรายรับหรือรายจ่าย</p>`
+      ? `<p class="g-note">🔄 โอนระหว่างบัญชีธนาคารของคุณเอง หรือชำระบัตรเครดิต · <b>ไม่นับ</b>เป็นรายรับหรือรายจ่าย${books().length > 1 ? ' · ถ้าย้ายเงินไปอีกบัญชีในแอป เลือกปลายทางด้านล่าง' : ''}</p>`
       : `<div class="cat-grid">${list.map(c => `<button type="button" class="cat ${c.id === d.cat ? 'on' : ''}" data-action="d-cat" data-id="${c.id}">
       <span>${c.emoji}</span><small>${esc(c.name)}</small></button>`).join('')}</div>`}
+    ${books().length > 1 ? `<div class="row gap">
+      <label class="lbl grow">${d.type === 'transfer' ? 'จากบัญชี' : 'บัญชี'}<select data-d="book">${bookOpts(d.book)}</select></label>
+      ${d.type === 'transfer' ? `<label class="lbl grow">ไปบัญชี<select data-d="toBook"><option value="">ภายในบัญชีเดียวกัน</option>${bookOpts(d.toBook, d.book)}</select></label>` : ''}
+    </div>` : ''}
     <div class="row gap">
       <label class="lbl grow">วันที่<input type="date" value="${d.date}" data-d="date" required></label>
       <label class="lbl grow">ช่องทาง<select data-d="method">${Object.entries(METHODS).map(([k, l]) => `<option value="${k}" ${d.method === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -645,7 +731,7 @@ async function runScan(files) {
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
   const cutISO = new Date(cutoff - cutoff.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const queue = [...files];
-  const opts = { key: geminiKey(), model: prefs.geminiModel, categories: cats(), today: todayISO(), ownerNames: ownerNames() };
+  const opts = { key: geminiKey(), model: prefs.geminiModel, categories: cats(scanBook()), today: todayISO(), ownerNames: ownerNames() };
   const seenQR = new Set(sc.items.map(i => i.qrRef).filter(Boolean));
   const worker = async () => {
     while (queue.length) {
@@ -693,6 +779,7 @@ function download(name, text, type) {
 // ---------- render ----------
 function render() {
   const app = $('#app');
+  if (!isAll() && !bookById(ui.book)) ui.book = books()[0].id; // book removed or not synced yet
   const onboarding = !prefs.onboarded;
   // private app: nothing is shown until the owner's account is signed in
   const gated = state.mode !== 'cloud' || state.access !== 'ok';
@@ -733,6 +820,19 @@ document.addEventListener('click', async e => {
       return render();
     }
     case 'stats-type': ui.statsType = el.dataset.t; return render();
+    case 'book': ui.book = el.dataset.b; S.savePrefs({ book: ui.book }); return render();
+    case 'book-new': return openBookEditor(null, el.dataset.k);
+    case 'book-edit': return openBookEditor(el.dataset.b);
+    case 'be-emoji': bookDraft.emoji = el.dataset.e; return renderBookEditor();
+    case 'book-delete': {
+      const b = bookById(bookDraft.id);
+      if (!b || state.tx.some(t => txBook(t) === b.id || t.toBook === b.id)) return toast('ยังมีรายการในบัญชีนี้');
+      if (!confirm(`ลบบัญชี "${b.name}"?`)) return;
+      S.saveSettings({ books: books().filter(x => x.id !== b.id) });
+      if (ui.book === b.id) { ui.book = books()[0].id; S.savePrefs({ book: ui.book }); }
+      $('#sheet').close();
+      return toast('ลบบัญชีแล้ว');
+    }
     case 'd-type': draft.type = el.dataset.t; return renderSheet();
     case 'd-cat': draft.cat = el.dataset.id; return renderSheet();
     case 'd-delete':
@@ -752,7 +852,7 @@ document.addEventListener('click', async e => {
     case 'scan-retry': { const files = ui.scan.errors.map(e => e.file).filter(Boolean); if (files.length) runScan(files); return; }
     case 'scan-save': {
       const chosen = ui.scan.items.filter(i => i.keep);
-      const pairs = chosen.map(({ keep, dup, old, fileName, file, ...t }) => ({ tx: { ...t, id: t.id || S.newId() }, file }));
+      const pairs = chosen.map(({ keep, dup, old, fileName, file, ...t }) => ({ tx: { ...t, book: scanBook(), id: t.id || S.newId() }, file }));
       const n = await S.saveMany(pairs.map(p => p.tx));
       ui.scan.items = ui.scan.items.filter(i => !i.keep);
       toast(`บันทึก ${n} รายการแล้ว ✅`);
@@ -780,16 +880,17 @@ document.addEventListener('click', async e => {
     case 'gkey-save': return saveGeminiKey($('[data-input="gkey"]')?.value);
     case 'gkey-change': ui.editKey = true; ui.keyMsg = ''; return render();
     case 'gkey-cancel': ui.editKey = false; ui.keyMsg = ''; return render();
-    case 'budget-save': S.saveSettings({ budget: Math.max(0, Number($('[data-input="budget"]').value) || 0) }); return toast('บันทึกงบแล้ว');
+    case 'budget-save': saveBook(setBook().id, { budget: Math.max(0, Number($('[data-input="budget"]').value) || 0) }); return toast('บันทึกงบแล้ว');
     case 'cat-edit': return openCatEditor(el.dataset.id);
     case 'cat-new': return openCatEditor(null, el.dataset.t);
     case 'ce-emoji': catDraft.emoji = el.dataset.e; return renderCatEditor();
-    case 'ce-move': return moveCategory(catDraft.id, Number(el.dataset.d));
-    case 'ce-delete': return deleteCategory(catDraft.id);
+    case 'ce-move': return moveCategory(catDraft.id, Number(el.dataset.d), catDraft.bookId);
+    case 'ce-delete': return deleteCategory(catDraft.id, catDraft.bookId);
     case 'cat-restore': {
-      const list = [...cats()];
-      S.DEFAULT_CATEGORIES.forEach(d => { if (!list.some(c => c.id === d.id)) list.push({ ...d }); });
-      S.saveSettings({ categories: list });
+      const sb = setBook();
+      const list = [...cats(sb.id)];
+      (S.BOOK_KINDS[sb.kind] || S.BOOK_KINDS.personal).categories.forEach(d => { if (!list.some(c => c.id === d.id)) list.push({ ...d }); });
+      saveBook(sb.id, { categories: list });
       return toast('คืนหมวดเริ่มต้นแล้ว');
     }
     case 'owner-save': S.saveSettings({ ownerNames: $('[data-input="owner"]').value.trim() }); return toast('บันทึกชื่อแล้ว');
@@ -797,10 +898,10 @@ document.addEventListener('click', async e => {
     case 'export-json':
       return download(`tsk-moneynote-backup-${todayISO()}.json`, JSON.stringify({ app: 'jukjik', version: 1, tx: state.tx, settings: state.settings }, null, 2), 'application/json');
     case 'export-csv': {
-      const head = 'date,type,amount,category,method,merchant,note';
+      const head = 'date,book,type,amount,category,method,merchant,note,to_book';
       const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
       const rows = [...state.tx].sort((a, b) => a.date.localeCompare(b.date))
-        .map(t => [t.date, t.type, t.amount, catById(t.cat).name, t.method, t.merchant, t.note].map(q).join(','));
+        .map(t => [t.date, bookById(txBook(t))?.name || txBook(t), t.type, t.amount, catById(t.cat, txBook(t)).name, t.method, t.merchant, t.note, t.toBook ? bookById(t.toBook)?.name || t.toBook : ''].map(q).join(','));
       return download(`tsk-moneynote-${todayISO()}.csv`, '﻿' + [head, ...rows].join('\n'), 'text/csv');
     }
   }
@@ -814,6 +915,7 @@ document.addEventListener('submit', async e => {
     const amount = Number(draft.amount);
     if (!(amount > 0)) return toast('ใส่จำนวนเงินก่อน');
     const { slipFile, removeSlip, ...rest } = draft;
+    if (rest.type !== 'transfer' || rest.toBook === rest.book) delete rest.toBook;
     if (removeSlip && !slipFile) rest.hasSlip = false;
     const saved = S.saveTx({ ...rest, amount: Math.round(amount * 100) / 100 });
     ui.month = draft.date.slice(0, 7);
@@ -829,14 +931,27 @@ document.addEventListener('submit', async e => {
       toast('เข้าสู่ระบบแล้ว');
     } catch (err) { ui.authError = err.message; }
     ui.authBusy = false; render();
+  } else if (f === 'book-edit') {
+    const d = bookDraft;
+    d.name = String(d.name || '').trim();
+    if (!d.name) return toast('ใส่ชื่อบัญชีก่อน');
+    if (books().some(b => b.id !== d.id && b.name === d.name)) return toast('มีบัญชีชื่อนี้แล้ว');
+    const emoji = String(d.emoji || '').trim() || '📒';
+    if (d.isNew) {
+      const { isNew, ...book } = d;
+      S.saveSettings({ books: [...books(), { ...book, emoji }] });
+      ui.book = book.id; S.savePrefs({ book: ui.book }); ui.setBook = book.id;
+    } else saveBook(d.id, { name: d.name, emoji });
+    $('#sheet').close();
+    toast(d.isNew ? 'เพิ่มบัญชีแล้ว' : 'บันทึกบัญชีแล้ว');
   } else if (f === 'cat-edit') {
     const d = catDraft;
     d.name = d.name.trim();
     if (!d.name) return toast('ใส่ชื่อหมวดก่อน');
-    if (cats().some(c => c.id !== d.id && c.type === d.type && c.name === d.name)) return toast('มีหมวดชื่อนี้แล้ว');
+    if (cats(d.bookId).some(c => c.id !== d.id && c.type === d.type && c.name === d.name)) return toast('มีหมวดชื่อนี้แล้ว');
     const item = { id: d.id, name: d.name, emoji: d.emoji.trim() || '🏷️', type: d.type };
-    const list = d.isNew ? [...cats(), item] : cats().map(c => c.id === d.id ? item : c);
-    S.saveSettings({ categories: list });
+    const list = d.isNew ? [...cats(d.bookId), item] : cats(d.bookId).map(c => c.id === d.id ? item : c);
+    saveBook(d.bookId, { categories: list });
     $('#sheet').close();
     toast(d.isNew ? 'เพิ่มหมวดแล้ว' : 'บันทึกหมวดแล้ว');
   }
@@ -844,7 +959,12 @@ document.addEventListener('submit', async e => {
 
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.dataset.d) { draft[t.dataset.d] = t.value; return; }
+  if (t.dataset.d) {
+    draft[t.dataset.d] = t.value;
+    if (t.dataset.d === 'book') { if (draft.toBook === draft.book) draft.toBook = ''; renderSheet(); }
+    return;
+  }
+  if (t.dataset.be) { bookDraft[t.dataset.be] = t.value; return; }
   if (t.dataset.ce) { catDraft[t.dataset.ce] = t.value; return; }
   if (t.dataset.rv) {
     const it = ui.scan.items[+t.dataset.i];
@@ -876,6 +996,13 @@ document.addEventListener('change', async e => {
       draft.slipFile = file; delete draft.removeSlip;
       return renderSheet();
     }
+    case 'setbook': ui.setBook = t.value; return render();
+    case 'scanbook': {
+      ui.scanBook = t.value;
+      const ids = new Set(cats(t.value).map(c => c.id));
+      ui.scan.items.forEach(it => { if (it.cat !== 'transfer' && !ids.has(it.cat)) it.cat = it.type === 'income' ? 'inc_other' : 'exp_other'; });
+      return render();
+    }
     case 'keepslips': S.saveSettings({ keepSlips: t.checked }); return toast(t.checked ? 'จะเก็บรูปสลิปไว้ในแอป' : 'ปิดการเก็บรูปสลิปในแอปแล้ว');
     case 'only30':
       ui.scan.only30 = t.checked;
@@ -891,7 +1018,8 @@ document.addEventListener('change', async e => {
         if (!Array.isArray(data.tx)) throw new Error();
         if (!confirm(`นำเข้า ${data.tx.length} รายการ? (รายการที่มี id เดียวกันจะถูกแทนที่)`)) return;
         await S.saveMany(data.tx);
-        if (data.settings?.categories) S.saveSettings({ categories: data.settings.categories, budget: data.settings.budget || 0 });
+        if (data.settings?.books?.length) S.saveSettings({ books: data.settings.books });
+        else if (data.settings?.categories) saveBook('personal', { categories: data.settings.categories, budget: data.settings.budget || 0 });
         toast(`นำเข้าแล้ว ${data.tx.length} รายการ`);
       } catch { toast('ไฟล์ไม่ถูกต้อง'); }
     }
