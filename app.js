@@ -84,7 +84,7 @@ function txRow(t) {
 // ---------- views ----------
 function viewOnboarding() {
   const steps = [
-    { e: '🐣', h: 'สวัสดี! ฉันคือ TSK-MoneyNote', p: 'ผู้ช่วยจดรายรับรายจ่ายของคุณ เรื่องเงินจุกจิกแค่ไหน ฉันก็จดให้ครบ' },
+    { e: '👋', h: 'สวัสดี! ฉันคือ TSK-MoneyNote', p: 'ผู้ช่วยจดรายรับรายจ่ายของคุณ เรื่องเงินจุกจิกแค่ไหน ฉันก็จดให้ครบ' },
     { e: '🧾', h: 'ส่งสลิปมา ฉันอ่านให้', p: 'เลือกรูปสลิปโอนเงินย้อนหลังได้ทีละหลายใบ (สูงสุด 30 วัน) อ่านได้ทุกธนาคาร รวมถึงใบแจ้งยอดบัตรเครดิต PDF' },
     { e: '🔄', h: 'ซิงก์ทุกเครื่อง', p: 'มือถือ แท็บเล็ต กี่เครื่องก็ได้ ล็อกอินบัญชีเดียว ข้อมูลตรงกันทันที ไม่ต้องใช้เบอร์มือถือหรือ OTP' },
     { e: '📊', h: 'รู้ว่าเงินไปไหน', p: 'สรุปรายวัน รายเดือน แยกหมวด พร้อมตั้งงบไม่ให้ใช้เกิน' },
@@ -93,7 +93,7 @@ function viewOnboarding() {
   const last = ui.obStep === steps.length - 1;
   return `<section class="onboard">
     <button class="link skip" data-action="ob-done">ข้าม</button>
-    <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-chick"><span class="ob-emoji">${s.e}</span></div>
+    <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-logo"><span class="ob-emoji">${s.e}</span></div>
     <h2>${s.h}</h2><p>${s.p}</p>
     <div class="dots">${steps.map((_, i) => `<i class="${i === ui.obStep ? 'on' : ''}"></i>`).join('')}</div>
     ${last
@@ -137,7 +137,7 @@ function viewHome() {
         <div><small>รายรับ</small><b class="num">${baht(inc)}</b></div>
         <div><small>รายจ่าย</small><b class="num">${baht(exp)}</b></div>
       </div>
-      <img src="icons/icon-512.png" alt="" class="hero-chick">
+      <img src="icons/icon-512.png" alt="" class="hero-logo">
     </section>
     ${budgetCard}
     ${list.length ? `<label class="search"><span aria-hidden="true">🔍</span><input type="search" placeholder="ค้นหารายการ" value="${esc(ui.search)}" data-input="search"></label>` : ''}
@@ -215,7 +215,7 @@ function viewScan() {
         ${t.url ? `<img src="${t.url}" alt="">` : `<div class="tray-pdf">📄<small>${esc(t.file.name)}</small></div>`}
         <button class="tray-x" data-action="tray-remove" data-i="${i}" aria-label="เอาออก">×</button></figure>`).join('')}
         <label class="tray-add"><input type="file" accept="image/*" multiple data-input="pick">＋</label></div>
-      <button class="btn primary big sticky" data-action="tray-read" ${off}>🐣 อ่าน ${tray.length} ${tray.length > 1 ? 'ไฟล์' : 'สลิป'}</button>
+      <button class="btn primary big sticky" data-action="tray-read" ${off}>🧾 อ่าน ${tray.length} ${tray.length > 1 ? 'ไฟล์' : 'สลิป'}</button>
     </section>` : ''}
     <label class="check"><input type="checkbox" data-input="only30" ${sc.only30 ? 'checked' : ''}> เลือกเฉพาะสลิป 30 วันล่าสุดให้อัตโนมัติ</label>
     ${sc.busy ? `<section class="card progress"><div class="spinner"></div><p>TSK-MoneyNote กำลังอ่าน… ${sc.done}/${sc.total}</p>
@@ -319,14 +319,14 @@ function viewGate() {
   const email = esc(state.user?.email || '');
   if (state.access === 'private') {
     return `<section class="onboard gate">
-      <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-chick"><span class="ob-emoji">🔒</span></div>
+      <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-logo"><span class="ob-emoji">🔒</span></div>
       <h2>แอปส่วนตัว</h2>
       <p>TSK-MoneyNote นี้ใช้ได้เฉพาะบัญชีของเจ้าของเท่านั้น<br>ตอนนี้ล็อกอินอยู่ด้วย <b>${email}</b></p>
       <button class="btn primary big" data-action="signout-now">ออกจากระบบ แล้วล็อกอินบัญชีเจ้าของ</button>
     </section>`;
   }
   return `<section class="onboard gate">
-    <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-chick"><span class="ob-emoji">🔐</span></div>
+    <div class="ob-art"><img src="icons/icon-512.png" alt="" class="ob-logo"><span class="ob-emoji">🔐</span></div>
     <h2>เข้าสู่ระบบ TSK-MoneyNote</h2>
     <p>แอปส่วนตัว · ล็อกอินด้วยบัญชีเดียวกันทุกเครื่อง ข้อมูลซิงก์ถึงกันหมด</p>
     <button class="btn primary big" data-action="google">เข้าสู่ระบบด้วย Google</button>
@@ -755,7 +755,7 @@ document.addEventListener('click', async e => {
       const pairs = chosen.map(({ keep, dup, old, fileName, file, ...t }) => ({ tx: { ...t, id: t.id || S.newId() }, file }));
       const n = await S.saveMany(pairs.map(p => p.tx));
       ui.scan.items = ui.scan.items.filter(i => !i.keep);
-      toast(`บันทึก ${n} รายการแล้ว 🐣`);
+      toast(`บันทึก ${n} รายการแล้ว ✅`);
       if (pairs[0]) ui.month = pairs[0].tx.date.slice(0, 7);
       learnOwnerName(pairs.map(p => p.tx));
       render();
@@ -818,7 +818,7 @@ document.addEventListener('submit', async e => {
     const saved = S.saveTx({ ...rest, amount: Math.round(amount * 100) / 100 });
     ui.month = draft.date.slice(0, 7);
     $('#sheet').close();
-    toast(draft.id ? 'แก้ไขแล้ว' : 'จดแล้ว 🐣');
+    toast(draft.id ? 'แก้ไขแล้ว' : 'จดแล้ว ✅');
     if (slipFile) keepSlips([{ tx: saved, file: slipFile }], true);
     else if (removeSlip && draft.hasSlip) S.deleteSlipImage(saved.id).catch(err => toast('ลบสลิปไม่สำเร็จ: ' + err.message));
   } else if (f === 'auth') {
